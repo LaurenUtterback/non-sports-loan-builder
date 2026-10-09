@@ -220,7 +220,7 @@ export async function loanDocsDefaults() {
   return res.json()
 }
 
-// Extract Team & Contract fields from an uploaded player contract / deal docs.
+// Extract Employer & Contract fields from an uploaded player contract / deal docs.
 export async function loanDocsExtract(files) {
   const docs = await Promise.all(
     Array.from(files).map(async (f) => ({
@@ -405,7 +405,7 @@ export async function binderPdf(info, docs, tabPages) {
 }
 // --- Deal structuring --------------------------------------------------------
 
-// The league pay-cadence defaults (NFL weekly game checks, NBA semi-monthly, …)
+// The pattern pay-cadence defaults (NFL weekly game checks, NBA semi-monthly, …)
 // used to prefill the Structure tab's timing fields.
 export async function structureCadences() {
   const res = await fetch(`${BASE}/structure/cadences`)
@@ -413,8 +413,8 @@ export async function structureCadences() {
   return res.json()
 }
 
-export async function structureCadence(league) {
-  const res = await fetch(`${BASE}/structure/cadence/${encodeURIComponent(league)}`)
+export async function structureCadence(pattern) {
+  const res = await fetch(`${BASE}/structure/cadence/${encodeURIComponent(pattern)}`)
   if (!res.ok) return null
   return res.json()
 }
@@ -495,7 +495,7 @@ export async function structureProposeTerms(inputs, contractRemaining = null) {
   const res = await fetch(`${BASE}/structure/terms`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs, contract_remaining: contractRemaining }),
+    body: JSON.stringify({ inputs, contracted_income: contractRemaining }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

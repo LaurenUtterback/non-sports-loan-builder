@@ -56,7 +56,7 @@ class LoanDocTerms(BaseModel):
     borrower_state_abbr: str = ""   # e.g. "FL" (UCC form cells)
     borrower_zip: str = ""
     borrower_state: str = ""        # spelled out, e.g. "Florida" (LSA text)
-    occupation: str = ""            # e.g. "Professional Baseball Player"
+    occupation: str = ""            # e.g. "Owner, Northgate Mechanical LLC"
     use_of_proceeds: str = "Business related expenses"
 
     # Deal
@@ -86,17 +86,19 @@ class LoanDocTerms(BaseModel):
     # cover page shows "None" for Team / Employer and Contract, and the
     # Contract / Borrower's Employer definitions and the Payment Direction
     # Letter's addressee switch to "the team that signs the Borrower in the
-    # upcoming <year> <league>" language (Lauren's wording, 2026-07-09) —
-    # driven by the league and upcoming_season_year fields below.
-    no_team_contract: bool = False
+    # upcoming <period> <payor type>" language —
+    # driven by the payor_type and payment_period_label fields below.
+    no_contracted_income: bool = False
     # Season year for the no-team-contract wording ("a 2026 Player's Contract
     # in the upcoming 2026 season"); blank falls back to the closing year.
-    upcoming_season_year: str = ""
-    team_name: str = ""
-    team_street: str = ""
-    team_city_state_zip: str = ""
-    league: str = ""
-    contract_title: str = ""        # defaults to "<league> Professional Contract"
+    payment_period_label: str = ""
+    payor_name: str = ""
+    payor_street: str = ""
+    payor_city_state_zip: str = ""
+    # What kind of counterparty owes under the assigned contract
+    # ("employer", "tenant", "customer") - used in the no-contract wording.
+    payor_type: str = ""
+    contract_title: str = ""        # the assigned agreement's own title
     contract_date: Optional[date] = None
 
     # Lender signatory (name is fixed: James Plack)

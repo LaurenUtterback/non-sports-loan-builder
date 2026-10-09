@@ -1,12 +1,12 @@
 """Deal structuring — propose a repayment structure from the borrower's cash flow.
 
 Every other builder in this app takes the loan's structure as GIVEN. This module
-derives it. It projects the athlete's month-by-month cash flow from how their
-league actually pays, then scores candidate structures against that projection.
+derives it. It projects the borrower's month-by-month cash flow from how their
+pattern actually pays, then scores candidate structures against that projection.
 
 The two variables that decide a structure
 -----------------------------------------
-1. TIMING   — when cash actually arrives (league pay cadence, bonus dates).
+1. TIMING   — when cash actually arrives (pattern pay cadence, bonus dates).
 2. CERTAINTY— whether that cash is contractually locked or contingent.
 
     dated & certain + recurring  -> amortize on the pay cadence
@@ -20,18 +20,18 @@ Rules encoded here
 ------------------
 S1. Taxes follow the CHECKS: 45% of each month's gross (calculations rule 1,
     distributed by pay date rather than annually). Bonus cash is taxed too.
-S2. Ordinary living expenses are 10% of annual salary + other income, spread
+S2. Ordinary living expenses are 10% of annual qualifying_income + other income, spread
     EVENLY over 12 months (calculations rule 2's annual total, but living costs
-    do not stop in the offseason, so they are not tied to pay timing).
-S3. The salary spread is the GUARANTEED season compensation only (rule 9), and
-    it stops after ``contract_end`` — no season is projected past the contract.
+    do not stop in the dry season, so they are not tied to pay timing).
+S3. The income spread is the DOCUMENTED annual qualifying income only, and
+    it stops after ``income_horizon`` — no season is projected past the contract.
 S4. Coverage is reported two ways. ``coverage`` is the strict same-month test
     (payment vs that month's cash). ``cushion_coverage`` tests against the
-    running surplus, because an athlete banks in-season money to live on in the
-    offseason. A structure that fails same-month but passes on cushion is viable
+    running surplus, because a borrower with uneven income banks the good months
+    dry season. A structure that fails same-month but passes on cushion is viable
     only if the borrower actually reserves — that is a credit judgment, so both
     numbers are always shown rather than collapsed into one verdict.
-S5. A maturity date in a DRY month (no salary) is always flagged. The balloon
+S5. A maturity date in a DRY month (no qualifying_income) is always flagged. The balloon
     should land where the cash is.
 S6. Interest accrues actual/365, consistent with calculations.calc_amort.
 
@@ -47,9 +47,9 @@ from typing import Optional
 
 from .calculations import LIVING_RATE, TAX_RATE
 from .structure_models import (
-    BonusEvent,
+    IncomeEvent,
     CashFlowMonth,
-    LeagueCadence,
+    IncomeCadence,
     StructureCandidate,
     StructureInputs,
     StructurePayment,
@@ -57,112 +57,128 @@ from .structure_models import (
 )
 
 
-# --- League pay cadences ---------------------------------------------------
+# --- Income cadence presets ------------------------------------------------
 #
-# Defaults only. Pay elections vary by player and the contract always wins —
-# every field is editable per deal in the UI.
+# Defaults only. How a borrower is actually paid is a question of fact for each
+# deal - every field is editable in the UI, and the documents always win. These
+# five patterns cover what the three non-sports borrower profiles present: a
+# payroll, owner distributions, rents, a seasonal trade, and project billing.
 
-LEAGUE_CADENCES: dict[str, LeagueCadence] = {
-    "NFL": LeagueCadence(
-        league="NFL",
-        label="Weekly game checks across the regular season",
-        season_start_month=9, season_start_day=7,
-        season_end_month=1, season_end_day=4,
-        pay_frequency="weekly",
-        notes="Base salary is paid in ~18 weekly game checks, Sept-early Jan. "
-              "Roughly seven dry months follow. Signing/roster/workout bonuses "
-              "are paid separately on their own dates.",
-    ),
-    "NBA": LeagueCadence(
-        league="NBA",
-        label="Semi-monthly, Nov 15 - Apr 30 (default election)",
-        season_start_month=11, season_start_day=15,
-        season_end_month=4, season_end_day=30,
+INCOME_CADENCES: dict[str, IncomeCadence] = {
+    "PAYROLL": IncomeCadence(
+        pattern="PAYROLL",
+        label="Semi-monthly payroll, year round",
         pay_frequency="semimonthly",
-        notes="Default is 24 semi-monthly payments across the season. Players "
-              "may elect a stretched 12-month schedule - confirm the election, "
-              "do not assume it.",
+        year_round=True,
+        notes="Salaried or executive pay on a regular payroll. Level income "
+              "every month supports a conventional amortizing schedule. "
+              "Confirm whether a bonus lands on its own date and add it as an "
+              "income event rather than spreading it.",
     ),
-    "MLB": LeagueCadence(
-        league="MLB",
-        label="Semi-monthly across the regular season",
-        season_start_month=4, season_start_day=1,
-        season_end_month=9, season_end_day=30,
-        pay_frequency="semimonthly",
-        notes="Paid semi-monthly during the regular season only. Signing "
-              "bonuses and deferred compensation are separate.",
-    ),
-    "NHL": LeagueCadence(
-        league="NHL",
-        label="Semi-monthly in season; signing bonus often July 1",
-        season_start_month=10, season_start_day=15,
-        season_end_month=4, season_end_day=15,
-        pay_frequency="semimonthly",
-        bonus_month=7, bonus_day=1,
-        notes="Signing-bonus installments are frequently paid July 1 and are "
-              "often the largest single cash event of the year - a natural "
-              "balloon date. Escrow holdback reduces the net check.",
-    ),
-    "MLS": LeagueCadence(
-        league="MLS",
-        label="Monthly, year round",
-        season_start_month=1, season_start_day=1,
-        season_end_month=12, season_end_day=31,
+    "DISTRIBUTIONS": IncomeCadence(
+        pattern="DISTRIBUTIONS",
+        label="Quarterly owner distributions",
         pay_frequency="monthly",
         year_round=True,
-        notes="Year-round monthly salary supports a conventional amortizing "
-              "schedule.",
+        notes="Owner draws taken quarterly rather than as payroll. The months "
+              "between distributions are thin: add each distribution as a "
+              "dated income event and let the projection show the gaps, "
+              "instead of spreading the annual figure evenly.",
+    ),
+    "RENTS": IncomeCadence(
+        pattern="RENTS",
+        label="Monthly rents, year round",
+        pay_frequency="monthly",
+        year_round=True,
+        notes="Rental income collected monthly. Level and predictable while "
+              "leases hold - set the income horizon to the earliest lease "
+              "expiry the facility depends on, not to the latest.",
+    ),
+    "SEASONAL": IncomeCadence(
+        pattern="SEASONAL",
+        label="Seasonal trade - income concentrated in part of the year",
+        season_start_month=4, season_start_day=1,
+        season_end_month=10, season_end_day=31,
+        pay_frequency="monthly",
+        notes="A seasonal business (construction, landscaping, tourism, "
+              "agriculture) earns in a window and lives off the surplus the "
+              "rest of the year. Set the real window from the tax returns' "
+              "quarterly pattern; a balloon maturing in a dry month is "
+              "flagged.",
+    ),
+    "PROJECT": IncomeCadence(
+        pattern="PROJECT",
+        label="Project / milestone billing - irregular",
+        pay_frequency="monthly",
+        year_round=True,
+        notes="Income arrives when projects bill, not on a calendar. Spreading "
+              "an annual figure evenly OVERSTATES every thin month: enter the "
+              "expected collections as dated income events where the contracts "
+              "or the receivables ageing support them.",
     ),
 }
 
-# League name aliases seen in extractions.
+# Aliases seen in extractions, mapping an industry or income description onto a
+# pattern. Unknown values fall through to the level-monthly default, which is
+# honest about knowing nothing rather than guessing a seasonal window.
 _ALIASES = {
-    "NATIONAL FOOTBALL LEAGUE": "NFL",
-    "FOOTBALL": "NFL",
-    "NATIONAL BASKETBALL ASSOCIATION": "NBA",
-    "BASKETBALL": "NBA",
-    "MAJOR LEAGUE BASEBALL": "MLB",
-    "BASEBALL": "MLB",
-    "NATIONAL HOCKEY LEAGUE": "NHL",
-    "HOCKEY": "NHL",
-    "ICE HOCKEY": "NHL",
-    "MAJOR LEAGUE SOCCER": "MLS",
-    "SOCCER": "MLS",
+    "SALARY": "PAYROLL",
+    "WAGES": "PAYROLL",
+    "W-2": "PAYROLL",
+    "EXECUTIVE": "PAYROLL",
+    "EMPLOYMENT": "PAYROLL",
+    "K-1": "DISTRIBUTIONS",
+    "DISTRIBUTION": "DISTRIBUTIONS",
+    "OWNER": "DISTRIBUTIONS",
+    "BUSINESS": "DISTRIBUTIONS",
+    "RENT": "RENTS",
+    "RENTAL": "RENTS",
+    "REAL ESTATE": "RENTS",
+    "LEASE": "RENTS",
+    "CONSTRUCTION": "SEASONAL",
+    "LANDSCAPING": "SEASONAL",
+    "AGRICULTURE": "SEASONAL",
+    "TOURISM": "SEASONAL",
+    "CONTRACTING": "PROJECT",
+    "CONSULTING": "PROJECT",
+    "PROFESSIONAL SERVICES": "PROJECT",
 }
 
-_DEFAULT_CADENCE = LeagueCadence(
-    league="",
-    label="Monthly, year round (no league cadence on file)",
+_DEFAULT_CADENCE = IncomeCadence(
+    pattern="",
+    label="Monthly, year round (no income pattern on file)",
     pay_frequency="monthly",
     year_round=True,
-    notes="No league pay cadence on file - defaulting to level monthly income. "
-          "Set the season window and pay frequency from the contract.",
+    notes="No income pattern on file - defaulting to level monthly income. "
+          "Set the pattern, the active window and the pay frequency from the "
+          "tax returns, pay stubs or leases before relying on the projection.",
 )
 
 
-def league_cadence(league: Optional[str]) -> LeagueCadence:
-    """Default pay cadence for a league name. Never raises — unknown leagues
-    fall back to level monthly income with a note."""
-    key = (league or "").strip().upper()
+def income_cadence(pattern: Optional[str]) -> IncomeCadence:
+    """Default cadence for an income pattern (or an industry word). Never
+    raises - anything unrecognised falls back to level monthly income with a
+    note saying so."""
+    key = (pattern or "").strip().upper()
     if not key:
         return _DEFAULT_CADENCE.model_copy()
-    if key in LEAGUE_CADENCES:
-        return LEAGUE_CADENCES[key].model_copy()
+    if key in INCOME_CADENCES:
+        return INCOME_CADENCES[key].model_copy()
     if key in _ALIASES:
-        return LEAGUE_CADENCES[_ALIASES[key]].model_copy()
+        return INCOME_CADENCES[_ALIASES[key]].model_copy()
     cad = _DEFAULT_CADENCE.model_copy()
-    cad.league = league or ""
+    cad.pattern = pattern or ""
     return cad
 
 
 # --- Season windows and pay dates ------------------------------------------
 
-def _wraps_year(cad: LeagueCadence) -> bool:
-    """True when the season runs across a calendar-year boundary (NFL, NBA, NHL)."""
+def _wraps_year(cad: IncomeCadence) -> bool:
+    """True when the income-active window runs across a calendar-year boundary."""
     return (cad.season_end_month, cad.season_end_day) < (cad.season_start_month, cad.season_start_day)
 
 
-def season_windows(cad: LeagueCadence, start: date, end: date) -> list[tuple[date, date]]:
+def season_windows(cad: IncomeCadence, start: date, end: date) -> list[tuple[date, date]]:
     """Every (season_start, season_end) pair overlapping [start, end]."""
     windows: list[tuple[date, date]] = []
     for year in range(start.year - 1, end.year + 2):
@@ -217,23 +233,23 @@ def _step_dates(s: date, e: date, freq: str) -> list[date]:
     return out
 
 
-def pay_dates(cad: LeagueCadence, start: date, end: date,
-              contract_end: Optional[date] = None) -> list[tuple[date, float]]:
-    """Salary pay dates in [start, end] with each one's share of a season's salary.
+def pay_dates(cad: IncomeCadence, start: date, end: date,
+              income_horizon: Optional[date] = None) -> list[tuple[date, float]]:
+    """Income receipt dates in [start, end], each with its share of a season.
 
-    Returns (date, fraction_of_one_season_salary). Rule S3: nothing is projected
-    past ``contract_end``.
+    Returns (date, fraction_of_one_season's income). Rule S3: nothing is
+    projected past ``income_horizon``.
     """
     out: list[tuple[date, float]] = []
     for s, e in season_windows(cad, start, end):
-        if contract_end and s > contract_end:
+        if income_horizon and s > income_horizon:
             continue
         dates = _step_dates(s, e, cad.pay_frequency)
         if not dates:
             continue
         share = 1.0 / len(dates)
         for d in dates:
-            if contract_end and d > contract_end:
+            if income_horizon and d > income_horizon:
                 continue
             if start <= d <= end:
                 out.append((d, share))
@@ -253,7 +269,7 @@ def _add_months(d: date, n: int) -> date:
 
 
 def project_cash_flow(inputs: StructureInputs,
-                      cad: Optional[LeagueCadence] = None,
+                      cad: Optional[IncomeCadence] = None,
                       months: Optional[int] = None) -> list[CashFlowMonth]:
     """Month-by-month cash available for the proposed facility.
 
@@ -267,19 +283,19 @@ def project_cash_flow(inputs: StructureInputs,
     end = _add_months(start, span)
 
     # Bucket every cash event into its month.
-    salary_by_month: dict[tuple[int, int], float] = {}
-    for d, share in pay_dates(cad, start, end, inputs.contract_end):
-        salary_by_month[_month_key(d)] = salary_by_month.get(_month_key(d), 0.0) + share * inputs.salary
+    income_by_month: dict[tuple[int, int], float] = {}
+    for d, share in pay_dates(cad, start, end, inputs.income_horizon):
+        income_by_month[_month_key(d)] = income_by_month.get(_month_key(d), 0.0) + share * inputs.qualifying_income
 
     bonus_by_month: dict[tuple[int, int], float] = {}
-    for b in inputs.bonus_events:
+    for b in inputs.income_events:
         if b.date and start <= b.date <= end:
             bonus_by_month[_month_key(b.date)] = bonus_by_month.get(_month_key(b.date), 0.0) + (b.amount or 0.0)
 
     # Other income is treated as level monthly unless a bonus event carries it.
     other_monthly = (inputs.other_income or 0.0) / 12.0
     # Rule S2 — living expenses spread evenly, off the memo's income basis.
-    annual_income_basis = (inputs.salary or 0.0) + (inputs.other_income or 0.0)
+    annual_income_basis = (inputs.qualifying_income or 0.0) + (inputs.other_income or 0.0)
     living_monthly = annual_income_basis * LIVING_RATE / 12.0
     other_debt_monthly = (inputs.other_debt_annual or 0.0) / 12.0
 
@@ -288,18 +304,18 @@ def project_cash_flow(inputs: StructureInputs,
     cursor = date(start.year, start.month, 1)
     for _ in range(span + 1):
         key = (cursor.year, cursor.month)
-        sal = salary_by_month.get(key, 0.0)
+        sal = income_by_month.get(key, 0.0)
         bon = bonus_by_month.get(key, 0.0)
         gross = sal + bon + other_monthly
         taxes = gross * TAX_RATE                       # rule S1
-        agent = gross * (inputs.agent_pct or 0.0) / 100.0
+        agent = gross * (inputs.fee_off_gross_pct or 0.0) / 100.0
         available = gross - taxes - agent - living_monthly - other_debt_monthly
         cumulative += available
         rows.append(CashFlowMonth(
             year=cursor.year, month=cursor.month,
             label=f"{cursor.strftime('%b')} {cursor.year}",
             in_season=sal > 0,
-            gross=round(gross, 2), salary=round(sal, 2),
+            gross=round(gross, 2), base_income=round(sal, 2),
             bonus=round(bon, 2), other=round(other_monthly, 2),
             taxes=round(taxes, 2), living=round(living_monthly, 2),
             other_debt=round(other_debt_monthly, 2),
@@ -318,9 +334,9 @@ def _projection_months(inputs: StructureInputs) -> int:
     return term + 1
 
 
-def resolve_cadence(inputs: StructureInputs) -> LeagueCadence:
-    """The cadence actually used: an explicit override, else the league default."""
-    return inputs.cadence or league_cadence(inputs.league)
+def resolve_cadence(inputs: StructureInputs) -> IncomeCadence:
+    """The cadence actually used: an explicit override, else the pattern default."""
+    return inputs.cadence or income_cadence(inputs.pattern)
 
 
 # --- Interest --------------------------------------------------------------
@@ -412,7 +428,7 @@ def _interest_only_balloon(inputs: StructureInputs) -> StructureCandidate:
         rationale=(
             "Interest paid monthly, principal repaid in full at maturity. This is "
             "South River's current default structure and is shown as the baseline. "
-            "It ignores pay timing — the monthly interest falls due in offseason "
+            "It ignores pay timing — the monthly interest falls due in dry "
             "months as readily as in-season ones."
         ),
         term_months=months,
@@ -421,11 +437,11 @@ def _interest_only_balloon(inputs: StructureInputs) -> StructureCandidate:
     )
 
 
-def _seasonal_amortization(inputs: StructureInputs, cad: LeagueCadence) -> Optional[StructureCandidate]:
+def _seasonal_amortization(inputs: StructureInputs, cad: IncomeCadence) -> Optional[StructureCandidate]:
     """Principal amortized only across the months the checks actually land.
 
     One payment per in-season month (the last pay date in that month), so the
-    schedule is servicable rather than following every weekly NFL game check.
+    schedule is servicable rather than following every individual receipt.
     Interest accrues actual/365 on the outstanding balance. Anything not retired
     by maturity is a balloon on the final in-season payment.
     """
@@ -434,7 +450,7 @@ def _seasonal_amortization(inputs: StructureInputs, cad: LeagueCadence) -> Optio
 
     fund = inputs.funding_date or date.today()
     mat = _maturity(inputs)
-    dates = pay_dates(cad, fund, mat, inputs.contract_end)
+    dates = pay_dates(cad, fund, mat, inputs.income_horizon)
     if not dates:
         return None
 
@@ -470,7 +486,7 @@ def _seasonal_amortization(inputs: StructureInputs, cad: LeagueCadence) -> Optio
         rationale=(
             f"Payments fall only in the {len(pay_days)} months the borrower is "
             f"actually paid ({cad.label.lower()}), with nothing due in the "
-            f"offseason. Principal amortizes across those months and interest "
+            f"dry months. Principal amortizes across those months and interest "
             f"accrues actual/365 on the declining balance. This is the structure "
             f"that matches the cash flow — and it collects while the money is "
             f"flowing, which matters most when the income is not guaranteed."
@@ -481,7 +497,7 @@ def _seasonal_amortization(inputs: StructureInputs, cad: LeagueCadence) -> Optio
     )
 
 
-def _fully_amortized(inputs: StructureInputs, cad: LeagueCadence) -> Optional[StructureCandidate]:
+def _fully_amortized(inputs: StructureInputs, cad: IncomeCadence) -> Optional[StructureCandidate]:
     """Level monthly payments — only offered when income is year-round."""
     if not cad.year_round:
         return None
@@ -566,7 +582,7 @@ def _score(cand: StructureCandidate, cash_flow: list[CashFlowMonth],
     cand.min_cushion_coverage = 0.0 if min_cushion == float("inf") else round(min_cushion, 3)
     cand.tightest_month = tightest
 
-    # rule S5 — a balloon landing in a month with no salary
+    # rule S5 — a balloon landing in a month with no qualifying_income
     if cand.maturity_date:
         m = by_month.get((cand.maturity_date.year, cand.maturity_date.month))
         cand.matures_in_dry_month = bool(m and not m.in_season)
@@ -599,7 +615,7 @@ def _score(cand: StructureCandidate, cash_flow: list[CashFlowMonth],
     if cand.matures_in_dry_month:
         # A dry month is not automatically the wrong month. Maturing just after
         # the last check — while banked cash is still at its peak — is the RIGHT
-        # side of the season; maturing deep in the offseason, after months of
+        # side of the season; maturing deep in the dry season, after months of
         # drawdown, is not. Distinguish them by where the cumulative sits.
         peak = max((m.cumulative for m in cash_flow), default=0.0)
         at_mat = next((m.cumulative for m in cash_flow
@@ -607,17 +623,17 @@ def _score(cand: StructureCandidate, cash_flow: list[CashFlowMonth],
                        and (m.year, m.month) == (cand.maturity_date.year, cand.maturity_date.month)), 0.0)
         if peak > 0 and at_mat >= peak * 0.95:
             cand.warnings.append(
-                "Maturity falls in a month with no salary income, but immediately "
+                "Maturity falls in a month with no income, but immediately "
                 "after the season — banked cash is still at its peak, so this is "
-                "the right side of the offseason to land on.")
+                "the right side of the dry season to land on.")
         else:
             cand.warnings.append(
-                "Maturity falls in a month with no salary income, after the "
-                "borrower has been drawing down the offseason. Move the balloon to "
+                "Maturity falls in a month with no income, after the "
+                "borrower has been drawing down the dry season. Move the balloon to "
                 "a pay month, or to just after the last check, unless an exit "
                 "event covers it.")
 
-    if not inputs.salary_guaranteed and cand.key in ("interest_only_balloon", "bullet_reserve"):
+    if not inputs.income_contracted and cand.key in ("interest_only_balloon", "bullet_reserve"):
         cand.warnings.append(
             "Income is not guaranteed. Deferring principal to a balloon leaves the "
             "full amount exposed to a cut or injury — amortizing while the money "
@@ -634,7 +650,7 @@ def _recommend(cands: list[StructureCandidate], inputs: StructureInputs) -> None
         return
     by_key = {c.key: c for c in cands}
 
-    event_driven = bool(inputs.expected_exit_date) or (inputs.salary or 0) <= 0
+    event_driven = bool(inputs.expected_exit_date) or (inputs.qualifying_income or 0) <= 0
     if event_driven and "bullet_reserve" in by_key:
         by_key["bullet_reserve"].recommended = True
         return
@@ -658,22 +674,22 @@ def _recommend(cands: list[StructureCandidate], inputs: StructureInputs) -> None
 
 
 def _apply_no_contract(inputs: StructureInputs) -> StructureInputs:
-    """Enforce no-team-contract mode server-side, never trusting the form.
+    """Enforce no-employer-contract mode server-side, never trusting the form.
 
-    A stale salary left in a disabled field must not fund the projection —
+    A stale qualifying_income left in a disabled field must not fund the projection —
     other income and dated bonus payments are all the cash there is. A
     PROPOSED (unexecuted) contract's expected signing date becomes the exit
     event when none was entered: the deal is repaid by the signing, so the
     bullet should mature just after it. The proposed VALUE is deliberately
     not touched here — it sizes the loan in propose_terms and is never income.
     """
-    if not inputs.no_team_contract:
+    if not inputs.no_contracted_income:
         return inputs
-    update: dict = {"salary": 0.0, "salary_guaranteed": False}
-    if inputs.proposed_contract_date and not inputs.expected_exit_date:
-        update["expected_exit_date"] = inputs.proposed_contract_date
+    update: dict = {"qualifying_income": 0.0, "income_contracted": False}
+    if inputs.pending_proceeds_date and not inputs.expected_exit_date:
+        update["expected_exit_date"] = inputs.pending_proceeds_date
         if not inputs.expected_exit_label:
-            update["expected_exit_label"] = "proposed contract signing"
+            update["expected_exit_label"] = "pending proceeds"
     return inputs.model_copy(update=update)
 
 
@@ -693,31 +709,32 @@ def propose_structures(inputs: StructureInputs) -> StructureResult:
     cands = [_score(c, cash_flow, inputs) for c in raw if c is not None]
     _recommend(cands, inputs)
 
-    annual_gross = (inputs.salary or 0.0) + (inputs.other_income or 0.0)
+    annual_gross = (inputs.qualifying_income or 0.0) + (inputs.other_income or 0.0)
     annual_available = annual_gross * (1 - TAX_RATE - LIVING_RATE) - (inputs.other_debt_annual or 0.0)
 
     notes: list[str] = []
-    if inputs.no_team_contract:
+    if inputs.no_contracted_income:
         notes.append(
-            "No team contract — the projection runs on other income and dated "
-            "payments only; no salary or salary cadence is used.")
-        if inputs.proposed_contract_value:
-            when = (f", expected to sign {inputs.proposed_contract_date:%b %d, %Y}"
-                    if inputs.proposed_contract_date else "")
+            "No contracted income — the projection runs on other income and "
+            "dated receipts only; no recurring income or income cadence is used.")
+        if inputs.pending_proceeds_value:
+            when = (f", expected {inputs.pending_proceeds_date:%b %d, %Y}"
+                    if inputs.pending_proceeds_date else "")
             notes.append(
-                f"A PROPOSED contract for ${inputs.proposed_contract_value:,.0f} "
-                f"guaranteed is on the table{when} — unexecuted, so it sizes the "
-                f"loan and times the exit but is never projected as income.")
-    if cad.notes and not inputs.no_team_contract:
-        notes.append(f"{cad.league or 'Cadence'}: {cad.notes}")
+                f"PENDING proceeds of ${inputs.pending_proceeds_value:,.0f} are "
+                f"expected{when} — not yet received, so they size the loan and "
+                f"time the exit but are never projected as income.")
+    if cad.notes and not inputs.no_contracted_income:
+        notes.append(f"{cad.pattern or 'Cadence'}: {cad.notes}")
     if not inputs.funding_date:
         notes.append("No funding date entered — the projection starts today.")
-    if inputs.contract_end:
+    if inputs.income_horizon:
         notes.append(
-            f"No salary is projected past the contract end ({inputs.contract_end:%b %d, %Y}).")
-    if inputs.agent_pct:
+            f"No income is projected past the income horizon "
+            f"({inputs.income_horizon:%b %d, %Y}).")
+    if inputs.fee_off_gross_pct:
         notes.append(
-            f"An agent commission of {inputs.agent_pct:g}% is applied, so this projection "
+            f"An agent commission of {inputs.fee_off_gross_pct:g}% is applied, so this projection "
             f"deliberately runs below the credit memo's cash flow.")
     dry = [m.label for m in cash_flow if not m.in_season and m.gross <= 0]
     if dry:
@@ -772,10 +789,10 @@ def _repayable_from_earnings(result: StructureResult, min_cov: float) -> bool:
 
     Tested against BANKED cash (cushion coverage), not the tightest single
     month. South River's facilities are balloons retired from a season's
-    accumulated earnings via the payroll sweep — an athlete banks in-season
-    money precisely because the offseason has none. Judging capacity on the
-    thinnest month instead would cap a $1.4m NFL salary at about $19,000,
-    because January carries only one game check.
+    accumulated income from the operating account — a borrower banks the earning
+    money precisely because the dry season has none. Judging capacity on the
+    thinnest month instead would cap a $1.4m seasonal income at about $19,000,
+    because the dry months carry no receipts at all.
 
     bullet_reserve is excluded on purpose: it is repaid by an exit event rather
     than by earnings, so counting it would make capacity unbounded.
@@ -791,7 +808,7 @@ def max_supportable_loan(inputs: StructureInputs, ceiling: float = 0.0) -> float
     still clears the minimum coverage. Returns 0.0 when even a token loan fails,
     which is the honest answer for a deal that has to be repaid by an event.
     """
-    hi = ceiling if ceiling > 0 else max((inputs.salary or 0.0) * 2, 1_000_000.0)
+    hi = ceiling if ceiling > 0 else max((inputs.qualifying_income or 0.0) * 2, 1_000_000.0)
 
     floor = max(hi * 0.001, 1000.0)
     min_cov = inputs.min_coverage or 1.0
@@ -815,49 +832,49 @@ def max_supportable_loan(inputs: StructureInputs, ceiling: float = 0.0) -> float
 
 
 def propose_terms(inputs: StructureInputs,
-                  contract_remaining: Optional[float] = None):
+                  contracted_income: Optional[float] = None):
     """Propose the loan amount, rate, points and term.
 
     The amount is the LOWER of two independent ceilings, and which one binds is
     reported rather than implied:
 
-      * POLICY    — South River's Loan-to-Contract limit
-                    (calculations.LTC_MAX_PCT) on guaranteed earnings, the same
+      * POLICY    — South River's Loan-to-Income limit
+                    (calculations.LTI_MAX_PCT) on the income basis, the same
                     basis rule 10 uses: total remaining contract value when
-                    known, else the guaranteed season salary.
+                    known, else the annual qualifying income.
       * CASH FLOW — the largest loan an income-serviced structure can actually
                     carry at the minimum coverage.
 
     Rate, points and term are house defaults. This does not price risk, and the
     returned ``rate_basis`` says so.
     """
-    from .calculations import LTC_MAX_PCT
+    from .calculations import LTI_MAX_PCT
     from .structure_models import ProposedTerms
 
-    # No-team-contract mode: the same enforcement propose_structures applies
-    # (zeroed salary; a proposed contract's signing date as the exit event),
-    # and the LTC basis is the PROPOSED contract's guaranteed value — the only
+    # No-employer-contract mode: the same enforcement propose_structures applies
+    # (zeroed income; the pending proceeds' expected date as the exit event),
+    # and the LTI basis is the PENDING proceeds' expected value — the only
     # earnings figure such a deal has, flagged below for credit approval.
     inputs = _apply_no_contract(inputs)
-    if inputs.no_team_contract:
-        basis = inputs.proposed_contract_value or 0.0
+    if inputs.no_contracted_income:
+        basis = inputs.pending_proceeds_value or 0.0
     else:
-        basis = contract_remaining or inputs.salary or 0.0
-    policy_cap = float(round(basis * LTC_MAX_PCT / 100.0, -3))
+        basis = contracted_income or inputs.qualifying_income or 0.0
+    policy_cap = float(round(basis * LTI_MAX_PCT / 100.0, -3))
     capacity = max_supportable_loan(inputs, ceiling=max(policy_cap * 2, 1_000_000.0))
 
     warnings: list[str] = []
-    event_driven = bool(inputs.expected_exit_date) or (inputs.salary or 0) <= 0
-    if inputs.no_team_contract:
+    event_driven = bool(inputs.expected_exit_date) or (inputs.qualifying_income or 0) <= 0
+    if inputs.no_contracted_income:
         if basis:
             warnings.append(
-                f"Sized against a PROPOSED contract (${basis:,.0f} guaranteed) "
-                f"that is NOT yet executed — nothing is contractually owed until "
-                f"it is signed. Requires credit approval prior to funding.")
+                f"Sized against PENDING proceeds of ${basis:,.0f} that have "
+                f"NOT yet closed — nothing is owed to the Borrower until they "
+                f"do. Requires credit approval prior to funding.")
         else:
             warnings.append(
-                "No team contract and no proposed contract value entered — the "
-                "LTC policy has nothing to run on, so only the cash-flow ceiling "
+                "No contracted income and no pending-proceeds value entered — the "
+                "LTI policy has nothing to run on, so only the cash-flow ceiling "
                 "applies.")
 
     if capacity <= 0:
@@ -874,24 +891,24 @@ def propose_terms(inputs: StructureInputs,
                 f"structure recommended below. Capacity runs to ${capacity:,.0f} "
                 f"before coverage breaks.")
     elif event_driven:
-        note = ("Not from earnings. The contract's cash flow cannot retire a loan "
+        note = ("Not from income. The projected cash flow cannot retire a loan "
                 "of this size, so repayment depends entirely on the exit event — "
                 "structure it as a bullet and size it against the event, not the "
-                "salary.")
+                "income.")
         warnings.append("Repayment is event-dependent: nothing here is serviced by income.")
     else:
         note = ("No. No income-serviced structure clears the minimum coverage at "
-                "any meaningful size — the contract cannot carry this facility.")
+                "any meaningful size — the income cannot carry this facility.")
         warnings.append("The borrower's cash flow does not support a loan on these terms.")
 
     if binding == "policy":
         warnings.append(
-            f"Held at the {LTC_MAX_PCT:g}% Loan-to-Contract policy limit on "
-            f"${basis:,.0f} of guaranteed earnings; the cash flow alone would "
+            f"Held at the {LTI_MAX_PCT:g}% Loan-to-Income policy limit on "
+            f"${basis:,.0f} of qualifying income; the cash flow alone would "
             f"carry ${capacity:,.0f}.")
     elif binding == "cash flow" and policy_cap and capacity < policy_cap:
         warnings.append(
-            f"Cash flow binds before policy does: {LTC_MAX_PCT:g}% LTC would "
+            f"Cash flow binds before policy does: {LTI_MAX_PCT:g}% LTI would "
             f"allow ${policy_cap:,.0f}.")
 
     return ProposedTerms(
@@ -902,7 +919,7 @@ def propose_terms(inputs: StructureInputs,
         policy_cap=policy_cap,
         cash_capacity=capacity,
         binding_constraint=binding,
-        guaranteed_earnings_basis=basis,
+        income_basis=basis,
         can_repay=can_repay,
         repayment_note=note,
         rate_basis=_RATE_BASIS,

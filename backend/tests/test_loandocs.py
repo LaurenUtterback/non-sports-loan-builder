@@ -13,6 +13,7 @@ Two guarantees:
 """
 
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -50,15 +51,16 @@ _TEMPLATE = (Path(__file__).parents[1] / "app" / "templates"
 
 def _terms() -> LoanDocTerms:
     return LoanDocTerms(
-        borrower_name="Test Player",
+        borrower_name="Test Borrower",
         borrower_street="123 Main Street",
         borrower_city="Tampa", borrower_state_abbr="FL", borrower_zip="33601",
         borrower_state="Florida",
-        occupation="Professional Baseball Player",
+        occupation="Owner, Example Mechanical LLC",
         loan_amount=2_000_000, interest_rate=12.5, origination_fee_pct=3,
         closing_date=date(2026, 7, 15), maturity_date=date(2026, 12, 1),
-        team_name="Example Team", team_street="1 Stadium Way",
-        team_city_state_zip="Tampa, FL 33601", league="MLB",
+        payor_name="Example Employer", payor_street="1 Commerce Way",
+        payor_city_state_zip="Tampa, FL 33601", payor_type="employer",
+        contract_title="Employment Agreement",
         contract_date=date(2025, 3, 1),
         settlement_lines=[
             SettlementLine(label="Lender Origination Fee (Est)", amount=60000),
@@ -76,13 +78,13 @@ def test_template_contains_no_deal_data():
 def test_render_contains_key_figures_and_no_source_deal():
     html = render_html(_terms(), LoanDocsInclude())
     for expected in [
-        "Test Player", "$2,000,000", "12.5%", "$60,000",       # deal figures
+        "Test Borrower", "$2,000,000", "12.5%", "$60,000",    # deal figures
         "December 1, 2026", "7/15/2026",                        # dates
         "PROMISSORY NOTE" if "PROMISSORY NOTE" in html else "Promissory Note",
         "Loan and Security Agreement", "Guaranty",
         "Memo of Settlement", "UCC FINANCING STATEMENT",
         "Payment Direction Letter",
-        "MLB Professional Contract dated as of March 1, 2025",
+        "Employment Agreement dated as of March 1, 2025",
     ]:
         assert expected in html
     # Settlement always recomputes: 2,000,000 - 60,000 - 2,075
@@ -133,43 +135,53 @@ def test_prepay_and_default_terms_render():
     assert "is 5 percentage points above" in html
 
 
-def test_no_team_contract_swaps_wording_and_blanks_cover():
-    """no_team_contract: the cover shows "None" for Team / Employer and
+def test_no_contracted_income_swaps_wording_and_blanks_cover():
+    """no_contracted_income: the cover shows "None" for Payor / Employer and
     Contract, and the Contract / Borrower's Employer definitions and the
-    Payment Direction Letter's addressee switch to the league-based wording
-    Lauren supplied 2026-07-09 (year falls back to the closing year)."""
+    Payment Direction Letter's addressee switch to the not-yet-identified-payor
+    wording (the period falls back to the closing year)."""
     terms = _terms()
-    terms.no_team_contract = True
-    terms.league = "NFL"
+    terms.no_contracted_income = True
+    terms.payor_type = "fiscal year"
     html = render_html(terms, LoanDocsInclude())
-    assert ('<td class="k">Team / Employer</td><td>None</td>') in html
+    assert ('<td class="k">Payor / Employer</td><td>None</td>') in html
     assert ('<td class="k">Contract</td><td>None</td>') in html
     # LSA Exhibit A — Borrower's Employer (closing 2026-07-15 -> year 2026)
-    assert ("means the team that signs the Borrower in the upcoming 2026 "
-            "National Football League.") in html
+    assert ("means the party that becomes obligated to pay the Borrower under "
+            "a contract entered into for the upcoming 2026 fiscal year.") in html
     # Contract definition — appears in BOTH the LSA and UCC Exhibit A
-    contract_def = ("Contract means the NFL Professional Contract between "
-                    "Test Player and The National Football League that signs "
-                    "Mr. Test Player to a 2026 Player’s Contract in the "
-                    "upcoming 2026 season")
+    contract_def = ("Contract means the agreement under which a payor becomes "
+                    "obligated to pay Test Borrower for the upcoming 2026 "
+                    "fiscal year")
     assert html.count(contract_def) == 2
-    # Payment Direction Letter stays in the package, addressed to the league
+    # Payment Direction Letter stays in the package, addressed to a payor TBD
     assert "Payment Direction Letter" in html
     cover = html.split("Documents in this Package")[1].split("</section>")[0]
     assert "Payment Direction Letter" in cover
-    assert ("The National Football League that signs Mr. Test Player in the "
-            "upcoming 2026 National Football League.") in html
-    assert "TBD (&ldquo;Team&rdquo;)" in html
-    # an explicit season year wins over the closing-date fallback
-    terms.upcoming_season_year = "2027"
+    assert "TBD (&ldquo;Payor&rdquo;)" in html
+    # an explicit period label wins over the closing-date fallback
+    terms.payment_period_label = "2027"
     html2 = render_html(terms, LoanDocsInclude())
-    assert "to a 2027 Player’s Contract in the upcoming 2027 season" in html2
-    # the flag defaults off: team wording renders normally
+    assert "for the upcoming 2027 fiscal year" in html2
+    # the flag defaults off: payor wording renders normally
     normal = render_html(_terms(), LoanDocsInclude())
     assert "Payment Direction Letter" in normal
-    assert "that signs the Borrower in the upcoming" not in normal
-    assert "TBD (&ldquo;Team&rdquo;)" not in normal
-    assert ('<td class="k">Team / Employer</td><td>Example Team</td>') in normal
+    assert "becomes obligated to pay the Borrower under a contract" not in normal
+    assert "TBD (&ldquo;Payor&rdquo;)" not in normal
+    assert ('<td class="k">Payor / Employer</td><td>Example Employer</td>') in normal
+
+
+def test_the_closing_package_never_calls_the_borrower_a_player():
+    """Every instrument in the package names the roles Borrower / Payor; the
+    athlete builder's Player / Team captions must not survive anywhere.
+
+    The base64 logo is stripped first - arbitrary base64 contains arbitrary
+    letter sequences, and "Team" really does appear inside ours.
+    """
+    html = re.sub(r'src="data:[^"]*"', 'src="LOGO"',
+                  render_html(_terms(), LoanDocsInclude()))
+    for athlete in ("Player", "Team", "traded", "franchise", "League", "season"):
+        assert athlete not in html, athlete
 
 
 def test_each_document_gets_a_cover_page():
@@ -179,7 +191,7 @@ def test_each_document_gets_a_cover_page():
     (Lauren, 2026-07-10)."""
     html = render_html(_terms(), LoanDocsInclude())
     assert html.count('class="page docpage doc-cover"') == 8
-    assert html.count('<p class="cover-borrower">Test Player</p>') == 8
+    assert html.count('<p class="cover-borrower">Test Borrower</p>') == 8
     for title in ["Business Entity Affidavit", "Promissory Note",
                   "Repayment Schedule",
                   "Loan and Security Agreement", "Guaranty",

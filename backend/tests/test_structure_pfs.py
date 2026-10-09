@@ -110,7 +110,6 @@ def test_failures_never_break_the_extract(monkeypatch):
 def test_extract_documents_runs_the_pfs_pass(monkeypatch):
     monkeypatch.setattr(se, "_ask_claude",
                         lambda docs, prompt, max_tokens: {"borrower_name": "T"})
-    monkeypatch.setattr(se, "_verify_with_spotrac", lambda ex: None)
     seen = {}
     monkeypatch.setattr(se, "_debt_service_from_pfs",
                         lambda ex: seen.setdefault("ex", ex))

@@ -217,16 +217,16 @@ def test_a_malformed_reply_still_reports_the_parse_error():
 
 
 def test_parse_json_reply_salvages_json_wrapped_in_prose():
-    """2026-08-25: the salary cross-check reply opened with a sentence before
+    """2026-08-25: the qualifying_income cross-check reply opened with a sentence before
     the JSON and the bare json.loads failed with "Expecting value: line 1
     column 1" - the UI then showed "cross-check could not be run" even though
     Spotrac had been fetched fine. The outermost {...} span must parse."""
     msg = _FakeMessage(
         'Here is the verification result you asked for:\n'
-        '{"spotrac_salary": 9000000, "season": "2026", "note": "Payroll salary '
+        '{"spotrac_salary": 9000000, "season": "2026", "note": "Payroll qualifying_income '
         'as Spotrac lists it."}\n'
         'Let me know if anything else is needed.')
-    data = extraction.parse_json_reply(msg, "salary cross-check")
+    data = extraction.parse_json_reply(msg, "qualifying_income cross-check")
     assert data["spotrac_salary"] == 9000000
     assert data["season"] == "2026"
 
@@ -235,4 +235,4 @@ def test_parse_json_reply_still_reports_a_truly_broken_reply():
     import pytest as _pytest
     msg = _FakeMessage("I could not find any contract data on that page.")
     with _pytest.raises(RuntimeError):
-        extraction.parse_json_reply(msg, "salary cross-check")
+        extraction.parse_json_reply(msg, "qualifying_income cross-check")

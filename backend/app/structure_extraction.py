@@ -1,7 +1,7 @@
 """Document extraction for the Deal Structuring tab.
 
 The credit memo's extraction already captures the CERTAINTY side of a deal
-(guaranteed salary, contract end, guarantee language). What structuring needs on
+(guaranteed qualifying_income, contract end, guarantee language). What structuring needs on
 top of that is TIMING — the pay election, the season window, and every dated
 lump payment — plus whatever the documents say about how the loan is expected to
 be repaid.
@@ -20,16 +20,9 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
-from .models import DebtScheduleRow, LineItem, SalaryCheck, UploadedDoc
+from .models import DebtScheduleRow, LineItem, UploadedDoc
 from .loandocs_extraction import _ask_claude, EXTRACTION_MODEL
-# The Spotrac cross-check reuses the credit memo's proven pieces: the verdict
-# math (build_salary_check — computed HERE, never by the model) and the same
-# usage-token auth as every other extractor.
-from .extraction import (
-    build_salary_check, usage_token, build_client, create_with_retry,
-    parse_json_reply, LEGAL_NAME_RULE, _CLAUDE_CODE_SYSTEM,
-)
-from .research import spotrac_lookup
+from .extraction import LEGAL_NAME_RULE
 
 
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
@@ -70,7 +63,7 @@ class _Tolerant(BaseModel):
         return default if default is not None else v
 
 
-class ExtractedBonus(_Tolerant):
+class ExtractedIncomeEvent(_Tolerant):
     label: str = ""
     date: Optional[str] = None          # ISO yyyy-mm-dd
     amount: Optional[float] = None
@@ -155,23 +148,23 @@ class StructureExtraction(_Tolerant):
 
     # Who
     borrower_name: str = ""
-    team: str = ""
-    league: str = ""
+    employer: str = ""
+    pattern: str = ""
 
     # Certainty
-    salary: Optional[float] = None            # GUARANTEED season compensation
+    qualifying_income: Optional[float] = None            # GUARANTEED season compensation
     other_income: Optional[float] = None
     other_debt_annual: Optional[float] = None
-    contract_end: Optional[str] = None        # ISO
-    salary_guaranteed: Optional[bool] = None
-    salary_guarantee_note: str = ""
+    income_horizon: Optional[str] = None        # ISO
+    income_contracted: Optional[bool] = None
+    income_commitment_note: str = ""
 
     # Timing — the fields the memo extraction does not carry
     pay_frequency: Optional[str] = None       # weekly | semimonthly | monthly
     season_start: Optional[str] = None        # ISO, the season's first pay date
     season_end: Optional[str] = None          # ISO, the season's last pay date
     pay_election_note: str = ""
-    bonus_events: list[ExtractedBonus] = []
+    income_events: list[ExtractedIncomeEvent] = []
 
     # Terms as presented
     loan_amount: Optional[float] = None
@@ -193,15 +186,7 @@ class StructureExtraction(_Tolerant):
     pfs: Optional[PFSRead] = None
     debt_service_note: str = ""               # filled server-side, shown in the UI
 
-    # Spotrac cross-check (filled server-side AFTER the document extraction,
-    # never by the document prompt). Verification only — the documents stay
-    # authoritative; the UI shows these under the salary / team / league fields
-    # and fills a field from them only when the documents produced nothing.
-    salary_check: Optional[SalaryCheck] = None
-    spotrac_team: str = ""
-    spotrac_league: str = ""
-
-    @field_validator("salary", "other_income", "other_debt_annual", "loan_amount",
+    @field_validator("qualifying_income", "other_income", "other_debt_annual", "loan_amount",
                      "interest_rate", "origination_fee_pct", mode="before")
     @classmethod
     def _clean_numbers(cls, v):
@@ -212,14 +197,14 @@ class StructureExtraction(_Tolerant):
     def _normalize_frequency(cls, v):
         """Map what Claude writes onto the three cadences the engine supports.
 
-        LeagueCadence.pay_frequency is a Literal, so an unrecognised value would
+        IncomeCadence.pay_frequency is a Literal, so an unrecognised value would
         fail the /propose call later — much further from the cause. Anything we
-        can't place returns None, which falls back to the league default.
+        can't place returns None, which falls back to the pattern default.
         """
         if not v:
             return None
         key = re.sub(r"[\s_-]", "", str(v)).lower()
-        if key in ("weekly", "everyweek", "pergame", "gamecheck", "gamechecks"):
+        if key in ("weekly", "everyweek", "perweek", "weeklydraw"):
             return "weekly"
         if key in ("semimonthly", "twicemonthly", "twiceamonth", "bimonthly",
                    "biweekly", "everytwoweeks", "fortnightly", "24payments"):
@@ -230,7 +215,7 @@ class StructureExtraction(_Tolerant):
             return "monthly"
         return None
 
-    @field_validator("salary_guaranteed", mode="before")
+    @field_validator("income_contracted", mode="before")
     @classmethod
     def _normalize_guaranteed(cls, v):
         if isinstance(v, str):
@@ -243,19 +228,22 @@ class StructureExtraction(_Tolerant):
         return v
 
 
-PROMPT = """You are reading loan documents for a professional athlete lender.
-Your job is to pull the facts needed to decide the loan's REPAYMENT STRUCTURE:
-when the borrower actually receives cash, and how certain that cash is.
+PROMPT = """You are reading loan documents for a NON-SPORTS lender. The
+borrower is a business owner or executive, an investment / real-estate
+borrower, or a general consumer or commercial borrower - there is no team,
+league or playing contract in this deal. Your job is to pull the facts needed
+to decide the loan's REPAYMENT STRUCTURE: when the borrower actually receives
+cash, and how certain that cash is.
 
 Return RAW JSON only — no prose, no markdown fence. Use this exact shape:
 
 {
-  "borrower_name": "", "team": "", "league": "",
-  "salary": null, "other_income": null, "other_debt_annual": null,
-  "contract_end": null, "salary_guaranteed": null, "salary_guarantee_note": "",
+  "borrower_name": "", "employer": "", "pattern": "", "industry": "",
+  "qualifying_income": null, "other_income": null, "other_debt_annual": null,
+  "income_horizon": null, "income_contracted": null, "income_commitment_note": "",
   "pay_frequency": null, "season_start": null, "season_end": null,
   "pay_election_note": "",
-  "bonus_events": [{"label": "", "date": null, "amount": null, "guaranteed": true}],
+  "income_events": [{"label": "", "date": null, "amount": null, "guaranteed": true}],
   "pfs": {"pfs_date": null, "mortgage_payments": 0, "hoa_payments": 0,
           "student_loans": 0, "interest_principal_loans": 0, "insurance": 0,
           "alimony": 0, "auto_payments": 0,
@@ -271,36 +259,52 @@ Return RAW JSON only — no prose, no markdown fence. Use this exact shape:
 
 RULES — these are load-bearing:
 
-1. SALARY is the GUARANTEED portion of the season's compensation ONLY: the
-   guaranteed base salary PLUS any bonus that is guaranteed and paid every year
-   of the contract (annual signing-bonus installments, guaranteed yearly roster
-   bonuses). Exclude non-guaranteed incentives, one-time bonuses and
-   endorsements. When installments differ season to season, use the one
-   SCHEDULED FOR THE SEASON BEING UNDERWRITTEN — never an average, never
-   another season's. If the contract states a Paragraph 5 salary but an
-   addendum guarantees only part of it, salary is the GUARANTEED part.
+1. QUALIFYING_INCOME is the borrower's ANNUAL income that underwriting can
+   stand behind: documented, recurring, and already received or contractually
+   committed. Compose it from whichever the documents support - salary and
+   recurring guaranteed bonus from a W-2, pay stub or employment agreement;
+   owner income from K-1 ordinary income, guaranteed payments, S-corp wages
+   and distributions or Schedule C net profit, taken from TAX RETURNS over any
+   internal statement and multiplied by the borrower's ownership percentage;
+   net rental income (gross rents LESS operating expenses, taxes, insurance
+   and existing mortgage debt service on the same property); and recurring
+   interest, dividends and required distributions. EXCLUDE capital gains and
+   sale proceeds, loan proceeds, gifts, one-time items, and anything that
+   appears only in a projection or pro forma. When income varies year to year,
+   use the MOST RECENT COMPLETE YEAR as filed - never an average, never the
+   best year - and say the prior year and the trend in notes.
 
-2. salary_guaranteed is TRUE only for a clean, unconditional guarantee. If the
-   guarantee is conditional, partial, voidable (failure to report, refusal to
-   play, non-football injury, retirement, breach), or a one-way/limited SPC,
-   set it FALSE and quote the condition in salary_guarantee_note. This flips
-   which structures make sense, so do not round it up to true.
+2. INCOME_CONTRACTED is TRUE only when a named payor is CONTRACTUALLY OBLIGED
+   to pay the income through the facility's maturity - signed leases running
+   past maturity, an employment agreement's guaranteed (non-discretionary)
+   pay, a contracted management or service fee. It is FALSE for at-will
+   employment, month-to-month tenancies, discretionary bonuses, and ordinary
+   business revenue, however reliable the history looks. If the obligation is
+   conditional, partial or terminable on notice, set it FALSE and quote the
+   condition in income_commitment_note. This flips which structures make
+   sense, so do not round it up to true.
 
-3. BONUS_EVENTS are dated lump payments that fall OUTSIDE the regular salary
-   cadence: signing-bonus installments, roster bonuses, workout bonuses,
-   endorsement milestones, deferred payments. Give each its real payment date
-   from the schedule. NEVER include an amount here that you already counted in
-   salary — if a guaranteed annual installment is inside salary, leave it out
-   of bonus_events. Mark guaranteed=false for anything contingent.
+3. INCOME_EVENTS are dated lump receipts that fall OUTSIDE the regular income
+   cadence: quarterly or annual owner distributions, an annual bonus, a
+   milestone or progress billing, a lease-up payment, a maturing note
+   receivable, expected sale or refinance proceeds. Give each its real expected
+   date from the documents. NEVER include an amount already counted in
+   qualifying_income - if quarterly distributions make up the annual figure,
+   either spread them through qualifying_income or list them here, not both.
+   Mark guaranteed=false for anything contingent (a sale not yet under
+   contract, a bonus not yet declared).
 
-4. TIMING: pay_frequency is "weekly", "semimonthly" or "monthly" — only if the
-   documents actually state how the player is paid. season_start / season_end
-   are the first and last SCHEDULED PAY DATES of the season, in ISO form, again
-   only if stated. If the documents are silent, return null and say so in
-   pay_election_note — a league default will be applied instead. Do NOT invent
-   a cadence. If the player has ELECTED a pay schedule (e.g. an NBA player
-   electing payment over 12 months instead of the season), record that election
-   in pay_election_note; it matters more than the league default.
+4. TIMING: pay_frequency is "weekly", "semimonthly" or "monthly" - only if the
+   documents actually state how the borrower is paid. season_start /
+   season_end are the first and last months of the borrower's INCOME-ACTIVE
+   WINDOW in ISO form, for a business that earns seasonally (construction,
+   landscaping, tourism, agriculture) - the tax returns' quarterly pattern or
+   the business's own statements are the evidence. Leave them null for income
+   earned evenly through the year. If the documents are silent on cadence,
+   return null and say so in pay_election_note - a pattern default is applied
+   instead. Do NOT invent a cadence. "pattern" is the income pattern in one
+   word where the documents support one: PAYROLL, DISTRIBUTIONS, RENTS,
+   SEASONAL or PROJECT. "industry" is the borrower's industry in a few words.
 
 5. PFS: when a Personal Financial Statement is among the documents, fill "pfs"
    with the SAME fields the credit-memo extraction captures (else "pfs": null):
@@ -324,7 +328,7 @@ RULES — these are load-bearing:
      payment are positive numbers (payment 0 when the row shows none —
      revolving lines such as credit cards typically show none).
      payment_period: "monthly" when the document indicates monthly, the stated
-     period copied verbatim when it names one ("per game check", "annual"),
+     period copied verbatim when it names one ("quarterly", "annual"),
      "" when the form shows an amount but no period — NEVER invent a period.
      Copy origination and maturity VERBATIM even when they look malformed; ""
      when blank. ROW ALIGNMENT: these are tables, and the text layer often
@@ -341,12 +345,12 @@ RULES — these are load-bearing:
 
 6. EXIT: fill expected_exit_date / expected_exit_label ONLY when the documents
    indicate repayment depends on a specific EVENT rather than on income — a
-   contract extension or new contract being signed, an endorsement closing, a
-   property sale, a refinance. expected_exit_label is a SHORT NOUN PHRASE
+   property sale, a refinance commitment, a business sale or recapitalization,
+   a contract award being signed, a note receivable maturing. expected_exit_label is a SHORT NOUN PHRASE
    naming the event, at most 8 words ("contract extension signing", "sale of
    the Miami property") — never a sentence and never your reasoning; that
    belongs in notes. Set the label even if no date is stated. If repayment
-   simply comes from salary, leave both null.
+   simply comes from the borrower's income, leave both null.
 
 7. presented_type is how the loan is structured AS PRESENTED, in the documents'
    own words ("Full balloon", "Interest only with balloon", "Fully amortized").
@@ -359,102 +363,12 @@ RULES — these are load-bearing:
 9. NOTES is read by a person in a single glance. Give at most 5 short items,
    semicolon-separated, covering only what would change the structuring
    decision or what you were unsure about — a conflict between documents, a
-   figure you had to interpret, a repayment source that is not the salary.
+   figure you had to interpret, a repayment source that is not the income.
    Do not restate figures that are already in the fields above, and do not
    summarize the deal.
 
 10. BORROWER_NAME. """ + LEGAL_NAME_RULE + """
 """
-
-
-SPOTRAC_CHECK_PROMPT = """You are a credit analyst at South River Capital verifying deal facts for a loan-structuring run: a professional athlete's season compensation, current team, and league, as Spotrac presents them.
-
-Borrower: {who}
-Today's date: {today}
-From the deal documents: guaranteed season salary ${doc_salary}.
-
-Below is the text of the athlete's Spotrac page. Using SPOTRAC ONLY (ignore the document figure above except to know which season is being underwritten), determine:
-1. The athlete's compensation for the current/upcoming season as Spotrac's CAP HIT for that season. The cap hit is the base salary PLUS the prorated signing bonus and any roster, workout, or other bonus amounts Spotrac counts for that season — NEVER return the base salary alone when Spotrac lists a cap hit or those bonus components for the season. If the page shows no cap hit (a league or page without one), compose the closest equivalent: the season's base salary plus that season's bonus amounts as Spotrac lists them. Use only the season being underwritten — exclude other seasons, one-time or performance/incentive bonuses Spotrac does not count for the season, and endorsements.
-2. The athlete's CURRENT team as Spotrac lists it — the team the athlete is signed/rostered with now, never a former team from a transaction history.
-3. The league the athlete plays in (NFL, NBA, MLB, NHL, MLS, ...).
-
-Return ONLY raw JSON, no markdown, no backticks: {{"spotrac_salary":0,"season":null,"team":null,"league":null,"note":null}}
-- spotrac_salary: that season cap hit (or composed equivalent) as a number. Return 0 if the page cannot support a figure (no contract data, contract expired, or the page describes a DIFFERENT person than the borrower — check name, sport, team).
-- season: the season/year the figure belongs to (e.g. "2026"), else null.
-- team / league: exactly as Spotrac lists them, else null. Return null for BOTH if the page describes a different person than the borrower.
-- note: 1-2 short plain-text sentences an underwriter can read: the figure's composition as Spotrac shows it (base salary + prorated signing bonus + other bonuses), and how much of the season's compensation Spotrac marks as GUARANTEED — or why no figure could be determined. Never use markdown.
-
-SPOTRAC ({url}):
-{text}"""
-
-
-def _ask_spotrac(text: str, url: str | None, ex: StructureExtraction) -> dict:
-    """Second Claude call: read the fetched Spotrac page for the season cap
-    hit, current team and league. Raises on any failure — the caller treats
-    every failure as 'check could not be run', never as a broken extract."""
-    token = usage_token()
-    if not token:
-        raise RuntimeError("No Claude usage token is set.")
-    import anthropic
-
-    client = build_client(anthropic, token)
-    who = ", ".join(p for p in (ex.borrower_name, ex.team, ex.league) if p)
-    message = create_with_retry(
-        client, "structure Spotrac check",
-        model=EXTRACTION_MODEL,
-        max_tokens=500,
-        system=_CLAUDE_CODE_SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": SPOTRAC_CHECK_PROMPT.format(
-                who=who or "(name not extracted)",
-                today=date.today().isoformat(),
-                doc_salary=f"{float(ex.salary or 0):,.0f}",
-                url=url,
-                text=text,
-            ),
-        }],
-    )
-    return parse_json_reply(message, "structure Spotrac check")
-
-
-def _verify_with_spotrac(ex: StructureExtraction) -> None:
-    """Cross-check the extracted guaranteed salary, team and league against the
-    athlete's Spotrac page (Lauren, 2026-08-14 — the same check the credit memo
-    tab runs, extended with team/league).
-
-    Mutates ``ex`` in place: ``salary_check`` (verdict computed by
-    build_salary_check, never the model) plus ``spotrac_team`` /
-    ``spotrac_league`` as Spotrac lists them. Best-effort by contract — any
-    failure leaves a 'verify manually' note and must NEVER break the extract.
-    """
-    manual_note = ("The Spotrac cross-check could not be run — verify the "
-                   "guaranteed salary, team and league manually at spotrac.com.")
-    try:
-        name = (ex.borrower_name or "").strip()
-        text = url = None
-        if name:
-            text, url = spotrac_lookup(name, ex.league or None, None)
-        if not text:
-            ex.salary_check = SalaryCheck(**build_salary_check(
-                ex.salary or 0, 0.0, url,
-                "Spotrac page could not be retrieved — verify the guaranteed "
-                "salary, team and league manually at spotrac.com."))
-            return
-        parsed = _ask_spotrac(text, url, ex)
-        ex.salary_check = SalaryCheck(**build_salary_check(
-            ex.salary or 0,
-            float(parsed.get("spotrac_salary") or 0),
-            url,
-            str(parsed.get("note") or "").strip(),
-            str(parsed.get("season") or "").strip() or None,
-        ))
-        ex.spotrac_team = str(parsed.get("team") or "").strip()
-        ex.spotrac_league = str(parsed.get("league") or "").strip()
-    except Exception as exc:  # noqa: BLE001 - verification must never break extraction
-        logging.getLogger(__name__).warning("Structure Spotrac check failed: %s", exc)
-        ex.salary_check = SalaryCheck(**build_salary_check(
-            ex.salary or 0, 0.0, None, manual_note))
 
 
 def _debt_service_from_pfs(ex: StructureExtraction) -> None:
@@ -500,12 +414,16 @@ def _debt_service_from_pfs(ex: StructureExtraction) -> None:
 
 def extract_documents(docs: list[UploadedDoc]) -> StructureExtraction:
     """Pull the structuring fields from uploaded deal documents, then run the
-    PFS through the memo's debt-service handling and cross-check salary /
-    team / league against Spotrac (both best-effort)."""
+    PFS through the memo's debt-service handling (best-effort).
+
+    The athlete builder also cross-checked the season salary, team and league
+    against Spotrac here. Nothing indexes a private borrower's income that
+    way, so the documents are the only source and the underwriter is the only
+    cross-check.
+    """
     # 8000, not 4000: the structure reply nests the full captured PFS, so
     # the same document-heavy deal that truncated the memo extraction on
     # 2026-08-20 would truncate here too.
     ex = StructureExtraction(**_ask_claude(docs, PROMPT, max_tokens=8000))
     _debt_service_from_pfs(ex)
-    _verify_with_spotrac(ex)
     return ex

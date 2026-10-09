@@ -274,17 +274,12 @@ def _split_name(name: str, surname: str = "") -> tuple[str, str, str]:
     return last, (given[0] if given else ""), middle
 
 
-# Spelled-out league names for the no-team-contract wording ("the team that
-# signs the Borrower in the upcoming 2026 National Football League"). Unknown
-# leagues fall through to whatever was typed in the League field.
-_LEAGUE_FULL = {
-    "NFL": "National Football League",
-    "MLB": "Major League Baseball",
-    "NBA": "National Basketball Association",
-    "NHL": "National Hockey League",
-    "MLS": "Major League Soccer",
-    "WNBA": "Women's National Basketball Association",
-}
+# How the not-yet-identified payor is described in the no-contract wording
+# ("the payor that contracts with the Borrower during the 2027 fiscal year").
+# The athlete builder spelled out league names here; a non-sports deal has no
+# fixed vocabulary for the counterparty, so whatever the underwriter typed in
+# the Payor type field is used verbatim, with a neutral default.
+_DEFAULT_PAYOR_DESCRIPTOR = "contract period"
 
 
 def render_html(terms: LoanDocTerms, include: LoanDocsInclude) -> str:
@@ -292,9 +287,11 @@ def render_html(terms: LoanDocTerms, include: LoanDocsInclude) -> str:
     if fee_amount is None and terms.loan_amount and terms.origination_fee_pct:
         fee_amount = terms.loan_amount * terms.origination_fee_pct / 100
 
-    contract_title = terms.contract_title or (
-        f"{terms.league} Professional Contract" if terms.league
-        else "Professional Contract")
+    # The assigned contract's own title governs ("Lease Agreement",
+    # "Employment Agreement", "Master Services Agreement"); the generic
+    # fallback is deliberately vague rather than guessing a document type the
+    # security agreement would then misdescribe.
+    contract_title = terms.contract_title or "Assigned Contract"
 
     last, first, middle_suffix = _split_name(terms.borrower_name,
                                              terms.borrower_surname)
@@ -343,15 +340,14 @@ def render_html(terms: LoanDocTerms, include: LoanDocsInclude) -> str:
         "closing_year": terms.closing_date.year if terms.closing_date else "20___",
         "maturity_date_long": _fmt_long(terms.maturity_date),
         "loan_number": terms.loan_number,
-        "no_team_contract": terms.no_team_contract,
-        "league_full": _LEAGUE_FULL.get((terms.league or "").strip().upper(),
-                                        (terms.league or "").strip())
-                       or "________________",
-        "upcoming_season_year": terms.upcoming_season_year.strip() or (
+        "no_contracted_income": terms.no_contracted_income,
+        "payor_descriptor": (terms.payor_type or "").strip()
+                            or _DEFAULT_PAYOR_DESCRIPTOR,
+        "payment_period_label": terms.payment_period_label.strip() or (
             str(terms.closing_date.year) if terms.closing_date else "20___"),
-        "team_name": terms.team_name or "____________________",
-        "team_street": terms.team_street or "____________________",
-        "team_city_state_zip": terms.team_city_state_zip or "____________________",
+        "payor_name": terms.payor_name or "____________________",
+        "payor_street": terms.payor_street or "____________________",
+        "payor_city_state_zip": terms.payor_city_state_zip or "____________________",
         "contract_title": contract_title,
         "contract_date_long": _fmt_long(terms.contract_date),
         "lender_signatory_title": terms.lender_signatory_title or "________",

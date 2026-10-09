@@ -96,37 +96,13 @@ class DebtScheduleRow(BaseModel):
     treatment: str = "roll"
 
 
-class SalaryCheck(BaseModel):
-    """Spotrac read of the guaranteed season salary and remaining contract
-    value (shown in Step 2).
+BORROWER_PROFILES = ("business", "investment", "consumer")
 
-    Since 2026-08-25 (Lauren) Spotrac is the PRIMARY source for the memo's
-    Guaranteed salary and Guaranteed remaining prefills; the documents are the
-    backup when Spotrac produced no figure, and their own figures are kept
-    here (``doc_salary`` / ``doc_remaining``) so Step 2 shows the executed
-    contract as the cross-check. ``spotrac_salary`` is Spotrac's CAP HIT for
-    the season being underwritten (base salary + prorated signing bonus +
-    other counted bonuses; never the base salary alone), with the guarantee
-    detail carried in ``note``. ``spotrac_remaining`` is the total remaining
-    contract value from that season forward. ``salary_source`` /
-    ``remaining_source`` record which source actually filled
-    Extraction.salary / Extraction.contract_remaining ("spotrac" | "docs" —
-    set by extraction.apply_spotrac_precedence; the Structure tab attaches
-    this check for verification only and leaves both at "docs").
-    ``verdict`` is computed server-side (extraction.build_salary_check),
-    never by the model:
-    "match" | "mismatch" | "docs_only" | "spotrac_only" | "unavailable".
-    """
-    spotrac_salary: float = 0.0
-    spotrac_remaining: float = 0.0    # Spotrac's total remaining contract value
-    doc_salary: float = 0.0           # the documents' season salary (backup)
-    doc_remaining: float = 0.0        # the documents' remaining value (backup)
-    salary_source: str = "docs"       # which source filled Extraction.salary
-    remaining_source: str = "docs"    # which filled Extraction.contract_remaining
-    season: Optional[str] = None      # the season the figure belongs to, e.g. "2026"
-    spotrac_url: Optional[str] = None
-    verdict: str = "unavailable"
-    note: str = ""                    # one-line plain-text explanation for the underwriter
+PROFILE_LABELS = {
+    "business": "Business owner / executive",
+    "investment": "Investment & real estate",
+    "consumer": "General consumer / commercial",
+}
 
 
 class Extraction(BaseModel):
@@ -144,15 +120,28 @@ class Extraction(BaseModel):
     dob: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
-    team: Optional[str] = None
-    league: Optional[str] = None
-    sport: Optional[str] = None
+    # Who pays the borrower, and what they do there. On a business-owner deal
+    # ``employer`` is the operating company the borrower owns; on an executive
+    # or consumer deal it is their employer; on an investment deal it is
+    # whatever entity holds the income-producing assets.
+    employer: Optional[str] = None
+    industry: Optional[str] = None
+    occupation: Optional[str] = None
     ssn_masked: Optional[str] = None
     drivers_license: Optional[str] = None
-    agent: Optional[str] = None
+    # The borrower's professional adviser on the deal - CPA, attorney, wealth
+    # manager or business manager (the non-sports counterpart of the athlete
+    # builder's sports agent).
+    advisor: Optional[str] = None
 
-    salary: float = 0.0               # GUARANTEED season compensation (base + this season's guaranteed bonus/installment)
-    contract_remaining: float = 0.0   # total remaining contract value (all remaining seasons)
+    # The income spine. ``qualifying_income`` is the ANNUAL income underwriting
+    # will stand behind - documented, recurring, and net of anything the
+    # underwriter would not lend against. ``contracted_income`` is the portion
+    # committed by contract or lease over the facility's own term, which many
+    # non-sports deals simply do not have (0 then); it is the LTI basis when
+    # present, exactly as the remaining contract value was for an athlete.
+    qualifying_income: float = 0.0
+    contracted_income: float = 0.0
     other_income: float = 0.0
     total_income: float = 0.0
     federal_taxes: float = 0.0        # captured but NOT used (taxes computed at 45%)
@@ -172,6 +161,13 @@ class Extraction(BaseModel):
     liabilities: list[LineItem] = Field(default_factory=list)
     total_liabilities: float = 0.0
     net_worth: float = 0.0            # captured but NOT used (recomputed)
+
+    # Pledged collateral, when the facility is secured by a specific asset
+    # (investment property, a securities account, equipment, a business
+    # interest). ``collateral_value`` drives the LTV test; both are blank on an
+    # unsecured deal carried by the personal guarantee alone.
+    collateral_value: float = 0.0
+    collateral_desc: Optional[str] = None
 
     # The date the PFS was prepared ("Completed on:"), ISO yyyy-mm-dd. Drives the
     # stale-PFS roll-forward (rule 15) together with debt_schedule below.
@@ -198,12 +194,15 @@ class Extraction(BaseModel):
     uses_of_funds: Optional[UsesOfFunds] = None
 
     credit_notes: Optional[str] = None
-    contract_notes: Optional[str] = None
-    sponsorship_narrative: Optional[str] = None
-
-    # Spotrac cross-check of `salary`, attached after extraction (best-effort,
-    # UI-only — see SalaryCheck). None only on extractions from before the check.
-    salary_check: Optional[SalaryCheck] = None
+    # Section VII's narrative on how the income was documented and composed
+    # (the athlete builder's contract_notes).
+    income_notes: Optional[str] = None
+    # Section V's narrative on the borrower, their business and their industry
+    # (the athlete builder's sponsorship_narrative). Written from the UPLOADED
+    # DOCUMENTS only - this builder does no public research, because there is no
+    # non-sports equivalent of Spotrac and a business owner's name is not a
+    # reliable public index.
+    background_narrative: Optional[str] = None
 
 
 class DealTerms(BaseModel):
@@ -212,28 +211,33 @@ class DealTerms(BaseModel):
     dob: str = ""
     addr: str = ""
     phone: str = ""
-    team: str = ""
-    league: str = ""
-    sport: str = ""
+    employer: str = ""
+    industry: str = ""
+    occupation: str = ""
     ssn: str = ""
     dl: str = ""
-    agent: str = ""
+    advisor: str = ""
 
     loan: float = 0.0
     rate: float = 0.0                 # annual % (e.g. 12 for 12%)
     fee: float = 0.0
-    salary: float = 0.0               # guaranteed season salary (base + guaranteed annual bonuses)
-    contract_remaining: float = 0.0   # total remaining contract value — the LTC /
-                                      # "Guaranteed Remaining" basis (rule 10).
-                                      # Blank falls back to Extraction.contract_remaining.
+    income: float = 0.0               # annual qualifying income. Blank falls
+                                      # back to Extraction.qualifying_income.
+    contracted_income: float = 0.0    # income committed by contract or lease
+                                      # over the facility term - the LTI basis
+                                      # when present (rule 10). Blank falls back
+                                      # to Extraction.contracted_income.
+    collateral_value: float = 0.0     # value of the pledged collateral - the
+                                      # LTV basis. 0 on an unsecured deal.
+    collateral_desc: str = ""         # what is pledged, in the underwriter's
+                                      # own words ("12 Harbor Road duplex").
     fund: Optional[date] = None       # funding date
     mat: Optional[date] = None        # maturity date
     loan_type: str = "New Loan"
-    is_college: bool = False          # college athlete (revenue share / NIL):
-                                      # Section IV's FAQ and the "Professional"
-                                      # phrasing swap to college language.
-                                      # Set only by the underwriter, never by
-                                      # extraction.
+    # Which of the three non-sports borrower profiles this deal is, which swaps
+    # the memo's risk FAQ, repayment sources and purpose language (rule 20).
+    # Set only by the underwriter, never by extraction.
+    profile: str = "business"
 
 
 class MemoRequest(BaseModel):

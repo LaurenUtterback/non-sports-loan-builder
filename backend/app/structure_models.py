@@ -1,7 +1,7 @@
 """Pydantic models for the Deal Structuring tab.
 
 The Structure builder answers a question the other tabs assume away: given how
-THIS athlete actually gets paid, what repayment structure should the loan have?
+THIS borrower actually gets paid, what repayment structure should the loan have?
 
 The other builders take the presented structure as given (LoanDocTerms defaults
 ``amortization_type`` to "balloon" and calculations.calc_amort can only express
@@ -15,7 +15,7 @@ through its existing ``repayment_schedule`` override.
 
 from __future__ import annotations
 
-# Aliased: BonusEvent and StructurePayment both have a field NAMED ``date``,
+# Aliased: IncomeEvent and StructurePayment both have a field NAMED ``date``,
 # which shadows the type when Pydantic resolves the annotation strings.
 from datetime import date as _date
 from typing import Literal, Optional
@@ -23,39 +23,41 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-# --- League pay cadence ----------------------------------------------------
+# --- Pattern pay cadence ----------------------------------------------------
 
 PayFrequency = Literal["weekly", "semimonthly", "monthly"]
 
 
-class LeagueCadence(BaseModel):
-    """How a league pays its players over a season.
+class IncomeCadence(BaseModel):
+    """When money reaches the borrower over a year.
 
-    These are DEFAULTS keyed off the league name. Every field is editable per
-    deal — pay elections vary by player (an NBA player can elect a stretched
-    12-month schedule) and the contract always wins over the default.
+    These are DEFAULTS keyed off the income pattern. Every field is editable
+    per deal — how a borrower is actually paid is a question of fact (a
+    quarterly draw, a seasonal trade, project billing) and the documents
+    always win over the default.
     """
 
-    league: str = ""
+    pattern: str = ""
     label: str = ""                        # human description shown in the UI
     season_start_month: int = 1
     season_start_day: int = 1
     season_end_month: int = 12
     season_end_day: int = 31
     pay_frequency: PayFrequency = "monthly"
-    # True when salary is paid across the whole year rather than in-season only.
+    # True when qualifying_income is paid across the whole year rather than in-season only.
     year_round: bool = False
-    # Month/day a signing-bonus installment customarily lands (NHL: July 1).
+    # Month/day a recurring annual receipt customarily lands (a K-1 true-up).
     bonus_month: Optional[int] = None
     bonus_day: Optional[int] = None
     notes: str = ""
 
 
-class BonusEvent(BaseModel):
-    """A dated lump payment outside the regular salary cadence.
+class IncomeEvent(BaseModel):
+    """A dated lump receipt outside the regular income cadence.
 
-    Signing-bonus installments, roster bonuses, an endorsement milestone, or the
-    expected proceeds of a deal not yet signed (mark ``guaranteed`` False).
+    Owner distributions, an annual bonus, a milestone or progress billing, a
+    maturing note receivable, or the expected proceeds of a sale or refinance
+    not yet closed (mark ``guaranteed`` False).
     """
 
     label: str = ""
@@ -72,36 +74,36 @@ class StructureInputs(BaseModel):
 
     # Who / what (mirrors Extraction so the memo can pre-fill)
     borrower_name: str = ""
-    league: str = ""
-    team: str = ""
+    pattern: str = ""
+    employer: str = ""
 
-    # Income — rule 9: salary is the GUARANTEED season compensation only.
-    salary: float = 0.0
+    # Income — documented, recurring annual qualifying income only.
+    qualifying_income: float = 0.0
     other_income: float = 0.0
     # Annual non-facility debt service from the memo's cash flow (mortgage,
     # autos, alimony, ...). Spread evenly across the year.
     other_debt_annual: float = 0.0
 
     # Certainty
-    contract_end: Optional[_date] = None
-    salary_guaranteed: bool = True
-    # No playing contract at all (free agent / income not from a team).
-    # ENFORCED SERVER-SIDE in propose_structures — salary is zeroed and the
+    income_horizon: Optional[_date] = None
+    income_contracted: bool = True
+    # No playing contract at all (free agent / income not from a employer).
+    # ENFORCED SERVER-SIDE in propose_structures — qualifying_income is zeroed and the
     # projection runs on other income and dated payments only, whatever the
     # form still carried (the same belt-and-suspenders as loandocs'
-    # no_team_contract dropping the Payment Direction Letter in render_html).
-    no_team_contract: bool = False
-    # A PROPOSED contract the athlete has on the table but has not executed
-    # (only read in no-team-contract mode). It sizes the loan — the LTC policy
+    # no_contracted_income dropping the Payment Direction Letter in render_html).
+    no_contracted_income: bool = False
+    # PENDING proceeds the borrower expects but has not yet received
+    # (only read in no-employer-contract mode). It sizes the loan — the LTI policy
     # cap runs on this value, flagged for credit approval — and its expected
     # signing date becomes the exit event. It is NEVER projected as income:
     # nothing is contractually owed until the contract is signed.
-    proposed_contract_value: float = 0.0
-    proposed_contract_date: Optional[_date] = None
+    pending_proceeds_value: float = 0.0
+    pending_proceeds_date: Optional[_date] = None
 
     # Timing
-    cadence: Optional[LeagueCadence] = None      # None → league default
-    bonus_events: list[BonusEvent] = Field(default_factory=list)
+    cadence: Optional[IncomeCadence] = None      # None → pattern default
+    income_events: list[IncomeEvent] = Field(default_factory=list)
 
     # Deal terms being tested
     loan_amount: float = 0.0
@@ -114,7 +116,7 @@ class StructureInputs(BaseModel):
     expected_exit_label: str = ""                # e.g. "Contract signing"
 
     # Underwriting knobs (editable — see structure.py for the defaults' basis)
-    agent_pct: float = 0.0                       # agent commission off gross
+    fee_off_gross_pct: float = 0.0                       # agent commission off gross
     min_coverage: float = 1.25                   # required cushion on a payment
 
     # The structure as presented to us, for the side-by-side.
@@ -131,8 +133,8 @@ class CashFlowMonth(BaseModel):
     month: int = 0
     label: str = ""                    # "Sep 2026"
     in_season: bool = False
-    gross: float = 0.0                 # salary + bonuses + other income
-    salary: float = 0.0
+    gross: float = 0.0                 # income + events + other income
+    base_income: float = 0.0
     bonus: float = 0.0
     other: float = 0.0
     taxes: float = 0.0
@@ -154,7 +156,7 @@ class StructurePayment(BaseModel):
     total: float = 0.0
     is_balloon: bool = False
     # Cash available in the month this payment falls in, and the resulting
-    # coverage. ``cushion`` uses the cumulative surplus (the player banks
+    # coverage. ``cushion`` uses the cumulative surplus (the borrower banks
     # in-season money); ``coverage`` is the stricter same-month test.
     month_available: float = 0.0
     coverage: float = 0.0
@@ -192,7 +194,7 @@ class StructureCandidate(BaseModel):
 
 class StructureResult(BaseModel):
     inputs_echo: StructureInputs
-    cadence_used: LeagueCadence
+    cadence_used: IncomeCadence
     cash_flow: list[CashFlowMonth] = Field(default_factory=list)
     candidates: list[StructureCandidate] = Field(default_factory=list)
     annual_gross: float = 0.0
@@ -226,12 +228,12 @@ class ProposedTerms(BaseModel):
     target_term_months: int = 0
 
     # The two independent ceilings, so the binding one is visible rather than
-    # implied. policy_cap is South River's LTC limit; cash_capacity is what the
+    # implied. policy_cap is South River's LTI limit; cash_capacity is what the
     # projected cash flow can actually service.
     policy_cap: float = 0.0
     cash_capacity: float = 0.0
     binding_constraint: str = ""        # "policy" | "cash flow" | "event"
-    guaranteed_earnings_basis: float = 0.0
+    income_basis: float = 0.0
 
     # Plain-English verdict on repayment.
     can_repay: bool = False
@@ -242,5 +244,5 @@ class ProposedTerms(BaseModel):
 
 class TermsRequest(BaseModel):
     inputs: StructureInputs
-    # Total remaining contract value when known — the LTC basis (rule 10).
-    contract_remaining: Optional[float] = None
+    # Total remaining contract value when known — the LTI basis (rule 10).
+    contracted_income: Optional[float] = None

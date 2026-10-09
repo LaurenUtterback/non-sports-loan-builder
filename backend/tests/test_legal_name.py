@@ -32,7 +32,7 @@ def test_the_memo_reader_keeps_the_name_the_memo_prints():
 
 def test_the_extraction_asks_for_the_ids_surname_separately():
     assert '"borrower_surname":null' in extraction.PROMPT
-    assert '"player_surname":null' in loandocs_extraction.PROMPT
+    assert '"borrower_surname":null' in loandocs_extraction.PROMPT
 
 
 def test_ucc_keeps_a_compound_surname_whole():

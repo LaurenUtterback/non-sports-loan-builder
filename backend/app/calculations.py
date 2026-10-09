@@ -112,7 +112,8 @@ import re
 from datetime import date
 from typing import Optional
 
-from .models import DebtScheduleRow, Extraction, LineItem
+from .models import (BORROWER_PROFILES, PROFILE_LABELS, DebtScheduleRow,
+                     Extraction, LineItem)
 
 
 # --- Underwriting constants ------------------------------------------------
@@ -635,38 +636,18 @@ def _apply_rollforward(liab_items: list[LineItem], rf: dict) -> list[LineItem]:
 
 # A PFS asset row carrying the contract's remaining value. Matched so a
 # remaining-contract value confirmed at underwriting can restate it (below).
-_CONTRACT_ASSET_RE = re.compile(r"contract", re.I)
-
-
-def mark_contract_asset(assets, contract_remaining: float):
-    """Restate the PFS "Contract (Remaining)" asset to the confirmed value.
-
-    The PFS reports the contract asset as of its own date. When the underwriter
-    confirms a DIFFERENT remaining contract value on the deal-terms form (a new
-    contract, or a stale statement), Section IX would otherwise report an asset
-    that contradicts Section VII's remaining-contract figure.
-
-    Only an explicit override marks the asset: the form is pre-filled from the
-    documents, so on an ordinary deal the two agree and nothing moves. Returns
-    ``(assets, mark)``; ``mark`` is None when nothing changed, else the reported
-    and restated figures for the Section IX footnote.
-    """
-    if not assets or not contract_remaining:
-        return assets, None
-    out, mark = [], None
-    for a in assets:
-        if mark is None and _CONTRACT_ASSET_RE.search(a.label or "")                 and a.amount and a.amount != contract_remaining:
-            mark = {"label": a.label, "reported": a.amount,
-                    "restated": contract_remaining}
-            out.append(LineItem(label=a.label, amount=contract_remaining))
-        else:
-            out.append(a)
-    return out, mark
+# NOTE (open item for Lauren). The athlete builder restated the PFS's
+# "Contract (Remaining)" asset to the remaining contract value confirmed at
+# underwriting, so Section IX could not contradict Section VII. Nothing in a
+# non-sports deal plays that role, so the restatement is NOT carried over. The
+# nearest counterpart - a pledged property the PFS values above its appraisal -
+# needs the underwriter to say WHICH asset row to restate, and guessing that row
+# from a collateral description would silently mismark a balance sheet. Section
+# IX therefore reports assets exactly as the statement does.
 
 
 def calc_balance_sheet(ed: Optional[Extraction], facility_due: float,
-                       as_of: Optional[date] = None,
-                       contract_remaining: float = 0) -> dict:
+                       as_of: Optional[date] = None) -> dict:
     """Net Worth = Total Assets - Total Liabilities, where liabilities include
     the proposed facility at loan + interest.
 
@@ -679,8 +660,7 @@ def calc_balance_sheet(ed: Optional[Extraction], facility_due: float,
     older than it, the scheduled debts are rolled forward first (rule 15) so
     Total Liabilities and Net Worth run on the adjusted balances.
     """
-    assets, contract_mark = mark_contract_asset(
-        (ed.assets if ed else None), contract_remaining)
+    assets = (ed.assets if ed else None) or []
     assets_total = _sum(assets) or (ed.total_assets if ed else 0) or 0
 
     liab_items = [
@@ -703,7 +683,6 @@ def calc_balance_sheet(ed: Optional[Extraction], facility_due: float,
     return {
         "assets_total": assets_total,
         "assets_items": assets or [],
-        "contract_mark": contract_mark,
         "stated_liab": stated_liab,
         "reported_liab": reported_liab,
         "total_liab": total_liab,
@@ -759,10 +738,17 @@ def calc_uses_of_funds(uof, loan: float, fee_pct: float) -> dict:
 # Matches the DDD (death, disability & disgrace) premium however the settlement
 # labels it: "DDD insurance", "D.D.D. Insurance Premium",
 # "Death & Disgrace Insurance (Est)", "Disability insurance", ...
-_DDD_RE = re.compile(r"\bddd\b|d\.\s*d\.\s*d|death|disab|disgrace", re.I)
+# A non-sports facility's counterpart of the athlete builder's DDD policy:
+# life, credit-life, disability or key-person cover assigned to Lender.
+# "disgrace" stays matched so a policy written on the athlete-lending form is
+# still recognised; the test is the same either way - whether the documents'
+# own disbursement carries the premium line (rule 19).
+_INSURANCE_RE = re.compile(
+    r"\bddd\b|d\.\s*d\.\s*d|death|disab|disgrace"
+    r"|life\s*insur|credit\s*life|key[\s-]*(man|person)", re.I)
 
 
-def has_ddd_insurance(uof) -> bool:
+def has_insurance(uof) -> bool:
     """Whether the deal carries a DDD policy — decided by the documents (rule 16).
 
     The premium shows up as a line in the disbursement breakdown (either side
@@ -772,22 +758,22 @@ def has_ddd_insurance(uof) -> bool:
     """
     if not uof:
         return False
-    return any(_DDD_RE.search(_label(item))
+    return any(_INSURANCE_RE.search(_label(item))
                for item in list(uof.deductions or []) + list(uof.additional_costs or []))
 
 
 # --- Cash flow (Guarantor Analysis) ---------------------------------------
 
 def build_cash_flow(ed: Optional[Extraction], amort: Optional[dict],
-                    loan: float, form_salary: float) -> dict:
-    # A salary confirmed on the deal-terms form WINS over the extracted figure,
+                    loan: float, form_income: float) -> dict:
+    # Income confirmed on the deal-terms form WINS over the extracted figure,
     # matching how every other confirmed term is resolved in memo.render_html
-    # (``terms.x or ed.x``). Before 2026-08-18 the extracted salary won here, so
-    # an underwriter who corrected the guaranteed salary (or clicked "Use
-    # Spotrac figure") moved Section VII but never this cash flow.
-    salary_income = (form_salary or 0) or (ed.salary if ed and ed.salary else 0)
+    # (``terms.x or ed.x``) - so a corrected qualifying income moves Section VII
+    # and this cash flow together, never one without the other.
+    base_income = (form_income or 0) or (
+        ed.qualifying_income if ed and ed.qualifying_income else 0)
     other_income = (ed.other_income if ed else 0) or 0
-    income = salary_income + other_income
+    income = base_income + other_income
 
     taxes = round(income * TAX_RATE)     # rule 1
     living = round(income * LIVING_RATE)  # rule 2
@@ -832,7 +818,7 @@ def build_cash_flow(ed: Optional[Extraction], amort: Optional[dict],
 
     return {
         "income": income,
-        "salary_income": salary_income,
+        "base_income": base_income,
         "other_income": other_income,
         "taxes": taxes,
         "living": living,
@@ -844,9 +830,38 @@ def build_cash_flow(ed: Optional[Extraction], amort: Optional[dict],
     }
 
 
-def calc_ltc(loan: float, guaranteed_salary: float) -> float:
-    """Loan-to-Contract = loan / guaranteed earnings, as a percentage."""
-    return (loan / guaranteed_salary * 100) if guaranteed_salary else 0.0
+def calc_lti(loan: float, income_basis: float) -> float:
+    """Loan-to-Income = loan / the annual income basis, as a percentage.
+
+    The direct successor to the athlete builder's LTC. ``income_basis`` is the
+    income committed by contract or lease over the facility term when the deal
+    has any (the closest thing to a guaranteed contract), else the annual
+    qualifying income - resolved by the caller, exactly as LTC resolved to the
+    remaining contract value or fell back to the season salary.
+    """
+    return (loan / income_basis * 100) if income_basis else 0.0
+
+
+def calc_ltv(loan: float, collateral_value: float) -> float:
+    """Loan-to-Value = loan / pledged collateral value, as a percentage.
+
+    0.0 when nothing is pledged, which the coversheet reports as N/A rather
+    than as a passing 0% - an unsecured deal has no LTV, it does not have a
+    perfect one.
+    """
+    return (loan / collateral_value * 100) if collateral_value else 0.0
+
+
+def calc_dscr(cf: dict) -> float:
+    """Debt-service coverage = cash available / total debt service, as a ratio.
+
+    Runs on build_cash_flow's own figures: ``avail`` (gross income less the 45%
+    tax and 10% living deductions) over ``total_ds`` (the proposed facility's
+    principal plus every existing debt payment). 0.0 when there is no debt
+    service at all, which the coversheet reports as N/A.
+    """
+    total_ds = cf.get("total_ds") or 0
+    return (cf.get("avail", 0) / total_ds) if total_ds else 0.0
 
 
 # --- Deal Summary & Policy Compliance (memo coversheet) ---------------------
@@ -860,50 +875,73 @@ CREDIT_NOT_SUMMARIZED = (
     "manually for the score, payment history (late or missed payments on "
     "auto loans, mortgages and credit cards), and derogatories.")
 
-# Policy thresholds per South River Capital athlete-lending guidelines.
-LTC_MAX_PCT = 30.0   # raised from 25% (Lauren, 2026-08-25)
+# Policy thresholds for non-sports lending.
+#
+# PLACEHOLDERS - these three numbers are NOT South River policy yet. The
+# athlete builder's one quantitative test (LTC <= 30% of the remaining
+# contract) has no automatic non-sports equivalent, so the values below are
+# ordinary commercial-credit starting points, put here to be argued with:
+#   LTI  - a loan at half of one year's qualifying income
+#   LTV  - a 65% advance against pledged collateral
+#   DSCR - 1.25x coverage of total debt service
+# Lauren sets the real ones; until she does, every memo's coversheet reports
+# them as provisional (see POLICY_PROVISIONAL below).
+LTI_MAX_PCT = 50.0
+LTV_MAX_PCT = 65.0
+DSCR_MIN = 1.25
 
-# The standing mitigants every SRC athlete loan carries; printed under any
-# exception so the approver signs off with the protections in view.
+# Printed under the coversheet checklist while the thresholds above are still
+# placeholders. Delete this (and the template's use of it) once the real
+# policy numbers are in - an approver must never read a provisional threshold
+# as a credit-committee one.
+POLICY_PROVISIONAL = (
+    "Provisional thresholds - LTI, LTV and DSCR limits above are commercial "
+    "placeholders pending South River Capital's non-sports credit policy."
+)
+
+# The standing mitigants every SRC non-sports loan carries; printed under any
+# exception so the approver signs off with the protections in view. The
+# athlete form's "payroll direct-deposit sweep at the source" becomes an ACH
+# authorization: there is no team payroll to sweep, and the UCC-1 attaches to
+# the pledged collateral rather than to a contract receivable.
 STANDARD_MITIGANTS = (
-    "payroll direct-deposit sweep at the source, UCC-1 first-lien on the "
-    "contract receivable, full personal guarantee with confession of "
-    "judgment, and DDD insurance assigned to Lender"
+    "ACH debit authorization against the Borrower's operating account, "
+    "UCC-1 first-lien on the pledged collateral, full personal guarantee "
+    "with confession of judgment, and life/disability insurance assigned "
+    "to Lender"
 )
-# The same mitigants on a deal without a DDD policy (rule 16 — the documents'
-# disbursement carries no premium line): the insurance clause drops out.
-STANDARD_MITIGANTS_NO_DDD = (
-    "payroll direct-deposit sweep at the source, UCC-1 first-lien on the "
-    "contract receivable, and full personal guarantee with confession of "
-    "judgment"
+# The same mitigants on a deal whose disbursement carries no insurance
+# premium line (rule 19): the insurance clause drops out.
+STANDARD_MITIGANTS_NO_INSURANCE = (
+    "ACH debit authorization against the Borrower's operating account, "
+    "UCC-1 first-lien on the pledged collateral, and full personal "
+    "guarantee with confession of judgment"
 )
 
 
-def calc_policy_compliance(*, ltc: float, cf: dict,
+def calc_policy_compliance(*, lti: float, ltv: float, dscr: float, cf: dict,
                            mat_fmt: str, has_maturity: bool,
-                           has_ddd: bool = True) -> dict:
+                           has_collateral: bool = False,
+                           has_insurance_policy: bool = True) -> dict:
     """Build the Deal Summary & Policy Compliance coversheet checklist.
 
     Each row is {label, req, actual, status} with status "pass" | "exc" | "na".
-    Quantitative tests (LTC, net cash flow) are COMPUTED from the same figures
-    the memo body reports, so the coversheet and the memo can never disagree.
-    Structural requirements every SRC deal satisfies through the loan
-    documents (UCC-1, clean UCC search, personal guarantee, DDD insurance,
-    work authorization, no-new-debt covenant) show as conditions of closing.
+    The quantitative tests (LTI, LTV, DSCR, net cash flow) are COMPUTED from
+    the same figures the memo body reports, so the coversheet and the memo can
+    never disagree - the one property of the athlete coversheet most worth
+    keeping. Structural requirements every SRC deal satisfies through the loan
+    documents (UCC-1, clean UCC search, personal guarantee, insurance, no-new-
+    debt covenant) show as conditions of closing.
 
-    ``has_ddd`` follows the documents' disbursement (rule 16 —
-    has_ddd_insurance). The "DDD insurance assigned to Lender" row always
-    prints (Lauren, 2026-08-26); when False it reads "If applicable" /
-    "None in place" with status N/A, and the mitigants sentence loses its
-    insurance clause,
-    so the coversheet never claims a policy the deal does not carry.
+    ``has_collateral`` is False on an unsecured deal carried by the personal
+    guarantee: the LTV and appraisal rows then report N/A rather than a
+    passing 0%, because an unsecured facility has no LTV to pass.
 
-    RETIRED CRITERIA (Lauren, 2026-08-25 — removed from the coversheet, the
-    exceptions block, and any compliance listing going forward): combined
-    contract-note leverage, combined LTV on the subject property, salary
-    fully guaranteed, payroll direct-deposit sweep, lien on real estate
-    recorded, minimum credit score, and no derogatories / late payments.
-    Do not re-add them without her direction.
+    ``has_insurance_policy`` follows the documents' disbursement (rule 19 -
+    has_insurance). The insurance row always prints; when False it reads
+    "If applicable" / "None in place" with status N/A, and the mitigants
+    sentence loses its insurance clause, so the coversheet never claims a
+    policy the deal does not carry.
 
     Every "exc" row is echoed in ``exceptions`` (with the standard mitigants),
     matching the sheet's rule that any exception requires credit approval
@@ -917,44 +955,59 @@ def calc_policy_compliance(*, ltc: float, cf: dict,
         rows.append({"label": label, "req": req, "actual": actual,
                      "status": status})
 
-    # 1. Loan-to-Contract — same figure as Section III Formulas/Advances.
-    add("Loan-to-Contract (LTC)", f"&le; {LTC_MAX_PCT:g}%", f"{ltc:.1f}%",
-        "pass" if ltc <= LTC_MAX_PCT else "exc")
+    # 1. Loan-to-Income - same figure as Section III Formulas/Advances.
+    add("Loan-to-Income (LTI)", f"&le; {LTI_MAX_PCT:g}%", f"{lti:.1f}%",
+        "pass" if lti and lti <= LTI_MAX_PCT else
+        ("na" if not lti else "exc"))
 
-    # 2. Structure.
-    add("Maturity within guaranteed term", "Required",
+    # 2. Loan-to-Value against the pledged collateral, when there is any.
+    if has_collateral:
+        add("Loan-to-Value (LTV)", f"&le; {LTV_MAX_PCT:g}%", f"{ltv:.1f}%",
+            "pass" if ltv <= LTV_MAX_PCT else "exc")
+        add("Appraisal / valuation on file", "Required",
+            "Condition of closing - third-party valuation of pledged collateral",
+            "pass")
+    else:
+        add("Loan-to-Value (LTV)", f"&le; {LTV_MAX_PCT:g}%",
+            "Unsecured - no collateral pledged", "na")
+
+    # 3. Debt-service coverage on Section VIII's own figures.
+    add("Debt-service coverage (DSCR)", f"&ge; {DSCR_MIN:g}x",
+        f"{dscr:.2f}x" if dscr else "No debt service",
+        "na" if not dscr else ("pass" if dscr >= DSCR_MIN else "exc"))
+
+    # 4. Structure.
+    add("Maturity within documented income term", "Required",
         f"Balloon at maturity {mat_fmt}" if has_maturity else "Maturity not set",
         "pass" if has_maturity else "na")
 
-    # 3-7. Structural requirements satisfied through the loan documents —
-    # closing conditions of every SRC athlete loan, per Section II.
-    for label, actual in (
-        ("UCC-1 on contract receivable", "Condition of closing — first-lien filing"),
-        ("Clean UCC search — no competing liens", "Pre-funding search — condition of closing"),
-        ("Personal guarantee w/ conf. of judgment", "Condition of closing — full personal guarantee"),
-    ):
-        add(label, "Required", actual, "pass")
+    # 5-7. Structural requirements satisfied through the loan documents -
+    # closing conditions of every SRC facility, per Section II.
+    add("UCC-1 on pledged collateral" if has_collateral
+        else "UCC-1 on Borrower's business assets", "Required",
+        "Condition of closing - first-lien filing", "pass")
+    add("Clean UCC search - no competing liens", "Required",
+        "Pre-funding search - condition of closing", "pass")
+    add("Personal guarantee w/ conf. of judgment", "Required",
+        "Condition of closing - full personal guarantee", "pass")
 
-    # The DDD row ALWAYS prints (Lauren, 2026-08-26); what it reports follows
-    # the documents' disbursement (rule 16): Required / policy as a condition
-    # of closing when the premium line is there, "If applicable" /
-    # "None in place" (N/A) when not — "Required" next to "None in place"
-    # read like a failed requirement (reworded — Lauren, 2026-08-27).
-    if has_ddd:
-        add("DDD insurance assigned to Lender", "Required",
-            "Condition of closing — policy naming Lender", "pass")
+    # The insurance row ALWAYS prints (rule 19); what it reports follows the
+    # documents' disbursement: Required / policy as a condition of closing
+    # when the premium line is there, "If applicable" / "None in place" (N/A)
+    # when not - "Required" next to "None in place" reads like a failed
+    # requirement, which it is not.
+    if has_insurance_policy:
+        add("Life / disability insurance to Lender", "Required",
+            "Condition of closing - policy naming Lender", "pass")
     else:
-        add("DDD insurance assigned to Lender", "If applicable",
+        add("Life / disability insurance to Lender", "If applicable",
             "None in place", "na")
 
-    add("US work authorization current", "Required",
-        "Verified at closing — condition of closing", "pass")
-
     # 8. Ongoing covenant in the loan documents (Section IV).
-    add("No new contract debt w/o consent", "Ongoing",
-        "Covenant in loan documents — quarterly credit pulls", "pass")
+    add("No new debt w/o Lender consent", "Ongoing",
+        "Covenant in loan documents - periodic credit pulls", "pass")
 
-    # 9. Net cash flow after debt service — Section VIII's bottom line.
+    # 9. Net cash flow after debt service - Section VIII's bottom line.
     net_cf = cf.get("net_cf", 0)
     add("Positive net cash flow after debt svc.", "Required",
         (f"{_money0(net_cf)}" if net_cf >= 0 else f"({_money0(abs(net_cf))})"),
@@ -963,8 +1016,9 @@ def calc_policy_compliance(*, ltc: float, cf: dict,
     exceptions = [{"label": r["label"], "detail": f'{r["actual"]} vs. {r["req"]}'}
                   for r in rows if r["status"] == "exc"]
     return {"rows": rows, "exceptions": exceptions,
-            "mitigants": (STANDARD_MITIGANTS if has_ddd
-                          else STANDARD_MITIGANTS_NO_DDD)}
+            "provisional": POLICY_PROVISIONAL,
+            "mitigants": (STANDARD_MITIGANTS if has_insurance_policy
+                          else STANDARD_MITIGANTS_NO_INSURANCE)}
 
 
 # --- SSN masking -----------------------------------------------------------
@@ -974,16 +1028,21 @@ def mask_ssn(value) -> str:
     return f"XXX-XX-{digits}" if digits else ""
 
 
-# --- Sport label -----------------------------------------------------------
-
-_PRO_PREFIX_RE = re.compile(r"^\s*professional\s+", re.I)
+# --- Borrower profile -----------------------------------------------------
 
 
-def normalize_sport(sport) -> str:
-    """Strip a leading 'Professional' from the sport name.
 
-    The memo phrases this as "a Professional <sport> player", so a sport value
-    of "Professional Ice Hockey" would render the word twice. Dropping the
-    prefix here guarantees the memo never says "Professional Professional ...".
+def normalize_profile(profile) -> str:
+    """The borrower profile, defaulting anything unrecognised to "business".
+
+    The memo's risk FAQ, purpose language and repayment sources all branch on
+    this, so an unknown value must land on a real profile rather than render a
+    memo with empty sections.
     """
-    return _PRO_PREFIX_RE.sub("", str(sport or "")).strip()
+    key = str(profile or "").strip().lower()
+    return key if key in BORROWER_PROFILES else "business"
+
+
+def profile_label(profile) -> str:
+    """Human label for the coversheet and the memo header."""
+    return PROFILE_LABELS[normalize_profile(profile)]

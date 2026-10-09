@@ -95,7 +95,7 @@ def _fmt_short(d: date | None) -> str:
 
 def _cf_rows_html(cf: dict) -> str:
     rows = [
-        ("1", "Contract Receivable (Guaranteed Salary)", cf["salary_income"], ""),
+        ("1", "Qualifying Income (Annual)", cf["base_income"], ""),
     ]
     if cf["other_income"]:
         rows.append(("2", "Other Income (Annual Income Section)", cf["other_income"], ""))
@@ -224,9 +224,10 @@ def _orphan_debt_rows(rf: dict, liab_items: list, reported_items: list) -> str:
     return "".join(out)
 
 
-def _pfs_html(ed: Extraction | None, facility_due: float, salary: float,
-              as_of: date | None = None, contract_remaining: float = 0) -> str:
-    bs = calc.calc_balance_sheet(ed, facility_due, as_of, contract_remaining)
+def _pfs_html(ed: Extraction | None, facility_due: float,
+              fallback_asset: float = 0, fallback_label: str = "",
+              as_of: date | None = None) -> str:
+    bs = calc.calc_balance_sheet(ed, facility_due, as_of)
     rf = bs.get("rollforward") or {}
     out = []
     if ed and ed.total_assets:
@@ -260,31 +261,31 @@ def _pfs_html(ed: Extraction | None, facility_due: float, salary: float,
                    f'<td class="num-col">{_money(bs["total_liab"])}</td></tr>')
         out.append(f'<tr class="grand"><td>Net Worth (Total Assets &minus; Total Liabilities)</td>'
                    f'<td class="num-col">{_signed(bs["net_worth"])}</td></tr>')
-        mark = bs.get("contract_mark")
-        if mark:
-            # Say on the statement that this asset is not the figure the PFS
-            # reports, the same way the roll-forward discloses the liabilities.
-            out.append(
-                f'<tr class="note"><td colspan="2"><em>{mark["label"]} is restated '
-                f'from the {_money(mark["reported"])} reported on the Personal '
-                f'Financial Statement to the {_money(mark["restated"])} remaining '
-                f'contract value confirmed at underwriting.</em></td></tr>')
         if rf.get("applied"):
             # Rule 15 — say on the statement itself that these are not the
             # figures the PFS reports, so no reader mistakes them for verbatim.
             out.append(f'<tr class="note"><td colspan="2"><em>{_rollforward_footnote(rf)}'
                        f'</em></td></tr>')
     else:
+        # No PFS among the documents. The statement is stubbed from the one
+        # asset the deal itself evidences, named so no reader mistakes it for
+        # a balance sheet: the pledged collateral, or the qualifying income
+        # where nothing is pledged.
         out.append(
-            f'<tr><td>Contract Receivable</td><td class="num-col">{_money(salary)}</td></tr>'
-            f'<tr class="total"><td>Total Assets</td><td class="num-col">{_money(salary)}</td></tr>'
+            f'<tr><td>{fallback_label or "Qualifying Income (Annual)"}</td>'
+            f'<td class="num-col">{_money(fallback_asset)}</td></tr>'
+            f'<tr class="total"><td>Total Assets</td><td class="num-col">{_money(fallback_asset)}</td></tr>'
             f'<tr><td>Liabilities</td><td></td></tr>'
             f'<tr><td><em>Proposed Facility (includes interest)</em></td>'
             f'<td class="num-col"><em>{_money(facility_due)}</em></td></tr>'
             f'<tr class="total"><td>Total Liabilities (incl. Proposed Facility)</td>'
             f'<td class="num-col">{_money(facility_due)}</td></tr>'
             f'<tr class="grand"><td>Net Worth (Total Assets &minus; Total Liabilities)</td>'
-            f'<td class="num-col">{_signed(salary - facility_due)}</td></tr>'
+            f'<td class="num-col">{_signed(fallback_asset - facility_due)}</td></tr>'
+            f'<tr class="note"><td colspan="2"><em>No Personal Financial '
+            f'Statement was among the documents: this statement shows only the '
+            f'asset the deal documents evidence and the proposed facility. '
+            f'Obtain a PFS before funding.</em></td></tr>'
         )
     return "".join(out)
 
@@ -422,66 +423,58 @@ def _exceptions_html(comp: dict) -> str:
     )
 
 
-_DUP_PROFESSIONAL_RE = re.compile(r"\bprofessional(?:\s+professional\b)+", re.I)
-
-
-def _dedupe_professional(html: str) -> str:
-    """Collapse any run of consecutive 'professional' words down to one.
-
-    The memo phrases the borrower as "a Professional <sport> player", and the
-    sport value is already normalized (calc.normalize_sport) so it can't carry
-    its own "Professional". This is the final, source-agnostic guarantee: even
-    if a narrative captured from the documents (sponsorship/contract notes)
-    contains the doubled word, the rendered memo never reads
-    "Professional Professional ...". Casing of the first word is preserved.
-    """
-    return _DUP_PROFESSIONAL_RE.sub(lambda m: m.group(0).split()[0], html)
-
-
 def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | None = None) -> str:
     """Render the full credit memo as an HTML string."""
     filenames = filenames or []
     # Confirmed deal terms win; otherwise fall back to what was pulled from the
-    # documents (same pattern as salary), so the memo reflects the term sheet.
+    # documents, so the memo reflects the term sheet.
     loan = terms.loan or (ed.loan_amount if ed else 0) or 0
     rate = terms.rate or (ed.interest_rate_pct if ed else 0) or 0
     fee = terms.fee or (ed.origination_fee_pct if ed else 0) or 0
-    salary = terms.salary or (ed.salary if ed else 0) or 0
-    sport = calc.normalize_sport(terms.sport)
+    income = terms.income or (ed.qualifying_income if ed else 0) or 0
+    profile = calc.normalize_profile(terms.profile)
 
     amort = None
     if terms.fund and terms.mat and loan and rate:
         amort = calc.calc_amort(loan, rate, terms.fund, terms.mat)
 
-    cf = calc.build_cash_flow(ed, amort, loan, salary)
+    cf = calc.build_cash_flow(ed, amort, loan, income)
     facility_due = calc.facility_total(ed, amort, loan)
-    # Section I's "advance against ..." figure and the LTC's guaranteed
-    # earnings use the TOTAL REMAINING contract value when the documents
-    # provide one (Lauren, 2026-07-06), falling back to the season salary.
-    # The cash flow and Section VII stay on the season salary.
-    # A remaining-contract value confirmed on the form wins over the extracted
-    # one (same ``terms.x or ed.x`` precedence as every other term above), so
-    # the underwriter can set the LTC basis when the documents are stale or
-    # a new contract supersedes them.
-    contract_remaining = (terms.contract_remaining
-                          or (ed.contract_remaining if ed else 0) or 0)
-    guar_basis = contract_remaining or salary
-    ltc = calc.calc_ltc(loan, guar_basis)
+
+    # The LTI basis, resolved exactly as the athlete builder resolved the LTC
+    # basis (rule 10): the income COMMITTED by contract or lease over the
+    # facility's term when the deal has any, else the annual qualifying
+    # income. Confirmed terms win over the documents either way.
+    contracted_income = (terms.contracted_income
+                         or (ed.contracted_income if ed else 0) or 0)
+    income_basis = contracted_income or income
+    lti = calc.calc_lti(loan, income_basis)
+
+    # LTV against the pledged collateral. Blank/0 means an unsecured facility,
+    # which the coversheet reports as N/A - never as a passing 0%.
+    collateral_value = (terms.collateral_value
+                        or (ed.collateral_value if ed else 0) or 0)
+    collateral_desc = (terms.collateral_desc
+                       or (ed.collateral_desc if ed else "") or "")
+    ltv = calc.calc_ltv(loan, collateral_value)
+    dscr = calc.calc_dscr(cf)
+
     uof = calc.calc_uses_of_funds(ed.uses_of_funds if ed else None, loan, fee)
-    # Rule 16: the memo claims a DDD policy ONLY when the documents' own
-    # disbursement carries the premium line. When it doesn't, every DDD
-    # mention drops out — coversheet row/collateral, mitigants, both Tertiary
-    # repayment-source cards, the Section II bullet, Section III's repayment
-    # cell, and the injury FAQ's assigned-policy bullet.
-    has_ddd = calc.has_ddd_insurance(ed.uses_of_funds if ed else None)
+    # Rule 19: the memo claims a life/disability policy ONLY when the
+    # documents' own disbursement carries the premium line. When it doesn't,
+    # every mention drops out - coversheet row/collateral, mitigants, both
+    # Tertiary repayment-source cards, the Section II bullet and Section III's
+    # repayment cell.
+    has_ins = calc.has_insurance(ed.uses_of_funds if ed else None)
 
     # Deal Summary & Policy Compliance coversheet (page 1). Runs on the same
-    # LTC / cash flow figures the memo body reports, so the checklist can
-    # never disagree with the sections behind it.
+    # LTI / LTV / DSCR / cash flow figures the memo body reports, so the
+    # checklist can never disagree with the sections behind it.
     credit_text = _credit_text(ed, date.today())
     compliance = calc.calc_policy_compliance(
-        ltc=ltc, cf=cf, mat_fmt=_fmt_long(terms.mat),
-        has_maturity=bool(terms.mat), has_ddd=has_ddd,
+        lti=lti, ltv=ltv, dscr=dscr, cf=cf, mat_fmt=_fmt_long(terms.mat),
+        has_maturity=bool(terms.mat), has_collateral=bool(collateral_value),
+        has_insurance_policy=has_ins,
     )
 
     amort_for_tpl = amort or {"rows": [], "interest": 0, "balloon": 0, "months": 0}
@@ -493,7 +486,7 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
         rep_rows = [
             {
                 "num": i + 1,
-                "date": r.date or "—",
+                "date": r.date or "\u2014",
                 "interest": r.interest,
                 "principal": r.principal,
                 "total": r.total or (r.interest + r.principal),
@@ -512,18 +505,22 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
     else:
         rep_rows, rep_totals = [], {}
 
+    collateral_cell = collateral_desc or (
+        "Pledged collateral" if collateral_value
+        else "Unsecured \u2014 personal guarantee")
+
     context = {
         "logo": _LOGO_PATH.read_text().strip(),
         "name": terms.name or "[Borrower Name]",
-        "team": terms.team or "[Team Name]",
-        "league": terms.league or "[League]",
-        "sport": sport or "[sport]",
+        "employer": terms.employer or "[Business / Employer]",
+        "industry": terms.industry or "[Industry]",
+        "occupation": terms.occupation or "[Role / Title]",
         "addr": terms.addr or "[Address]",
         "phone": terms.phone or "[Phone]",
         "dob": terms.dob or "[DOB]",
         "ssn": calc.mask_ssn(terms.ssn) or "[XXX-XX-####]",
         "dl": terms.dl or "[DL#]",
-        "agent": terms.agent or "",
+        "advisor": terms.advisor or "",
         "rate": _fmt_pct(rate),
         "fee": _fmt_pct(fee),
         "fee_amt": _money(loan * fee / 100) if loan and fee else "[Fee]",
@@ -532,39 +529,51 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
         "loan_type": terms.loan_type,
         "months": calc.loan_term_months(ed, amort),
         "loan_money": _money(loan),
-        "salary_money": _money(salary),
-        "guar_basis_money": _money(guar_basis),
-        "contract_remaining_money": (_money(contract_remaining)
-                                     if contract_remaining else ""),
+        "income_money": _money(income),
+        "income_basis_money": _money(income_basis),
+        "contracted_income_money": (_money(contracted_income)
+                                    if contracted_income else ""),
+        "collateral_money": _money(collateral_value) if collateral_value else "",
+        "collateral_desc": collateral_desc,
+        "collateral_cell": collateral_cell,
         "interest_money": _money(amort_for_tpl["interest"]),
-        "ltc": f"{ltc:.1f}",
-        "sponsor_text": (ed.sponsorship_narrative if ed and ed.sponsorship_narrative
-                         else f"{terms.name or '[Borrower Name]'} is a "
-                              f"{'Collegiate' if terms.is_college else 'Professional'} "
-                              f"{sport or '[sport]'} player for the "
-                              f"{terms.team or '[Team Name]'} of the {terms.league or '[League]'}."),
+        "lti": f"{lti:.1f}",
+        "ltv": f"{ltv:.1f}" if collateral_value else "",
+        "dscr": f"{dscr:.2f}" if dscr else "",
+        "background_text": (
+            ed.background_narrative if ed and ed.background_narrative
+            else f"{terms.name or '[Borrower Name]'} is "
+                 f"{terms.occupation or '[role]'} at "
+                 f"{terms.employer or '[Business / Employer]'}"
+                 f"{(' (' + terms.industry + ')') if terms.industry else ''}."),
         # Rule 15: when the PFS was rolled forward, the drafted explanation is
-        # appended here — Lauren documents the roll-forward in this paragraph.
+        # appended here - Lauren documents the roll-forward in this paragraph.
         "credit_text": credit_text,
         "compliance_html": _compliance_rows_html(compliance["rows"]),
         "exceptions_html": _exceptions_html(compliance),
-        "has_ddd": has_ddd,
-        # Rule 20: college mode swaps Section IV's FAQ and the "Professional"
-        # phrasing for college language. Underwriter-set only.
-        "is_college": bool(terms.is_college),
-        # Section VII (Contract Analysis) only. Section V (Project Sponsorship)
-        # deliberately does NOT show the contract notes — Lauren, 2026-07-06.
-        "contract_notes": ed.contract_notes if ed else "",
+        "provisional": compliance["provisional"],
+        "has_ins": has_ins,
+        # Rule 20: the borrower profile swaps Section IV's risk FAQ, Section
+        # I's purpose language and Section XI's primary repayment source.
+        # Underwriter-set only, never extracted.
+        "profile": profile,
+        "profile_label": calc.profile_label(profile),
+        # Section VII (Income Analysis) only. Section V (Borrower Background)
+        # deliberately does NOT repeat the income detail.
+        "income_notes": ed.income_notes if ed else "",
         "cf_html": _cf_rows_html(cf),
         "uses_html": _uses_of_funds_html(uof),
-        "pfs_html": _pfs_html(ed, facility_due, salary, date.today(),
-                              contract_remaining),
+        "pfs_html": _pfs_html(ed, facility_due,
+                              collateral_value or income,
+                              (collateral_desc or "Pledged Collateral")
+                              if collateral_value
+                              else "Qualifying Income (Annual)",
+                              date.today()),
         "repayment_html": _repayment_html(rep_rows, rep_totals),
         "doc_list_html": _doc_list_html(filenames),
     }
 
-    html = _env.get_template("memo.html.j2").render(**context)
-    return _dedupe_professional(html)
+    return _env.get_template("memo.html.j2").render(**context)
 
 
 def _render_pdf_inprocess(html: str, footer_text: str,
@@ -622,14 +631,14 @@ def _render_pdf_subprocess(html: str, footer_text: str,
     import subprocess
     import tempfile
 
-    from .research import _backend_python
+    from .venv_python import backend_python
 
     with tempfile.TemporaryDirectory() as td:
         in_path = Path(td) / "in.html"
         out_path = Path(td) / "out.pdf"
         in_path.write_text(html, encoding="utf-8")
         proc = subprocess.run(
-            [_backend_python(), "-m", "app.memo", str(in_path), str(out_path),
+            [backend_python(), "-m", "app.memo", str(in_path), str(out_path),
              footer_text, "1" if page_numbers else "0"],
             cwd=str(Path(__file__).resolve().parents[1]),
             capture_output=True, text=True, encoding="utf-8", timeout=180,

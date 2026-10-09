@@ -1,4 +1,4 @@
-"""FastAPI application for the Credit Memo Builder.
+"""FastAPI application for the Non-Sports Loan Builder.
 
 Routes
 ------
@@ -38,12 +38,12 @@ from . import esign_demand_signatures as esign_service
 from .loandocs_models import LoanDocsRequest, SettlementSheetResult
 from . import loandocs as loandocs_service
 from . import loandocs_sheet as loandocs_sheet_service
-from .loandocs_extraction import TeamContractExtraction, MemoDealExtraction
+from .loandocs_extraction import AssignedContractExtraction, MemoDealExtraction
 from . import loandocs_extraction as loandocs_extraction_service
 from .binder_models import BinderRequest
 from . import binder as binder_service
 from .structure_models import (
-    LeagueCadence, ProposedTerms, SelectRequest, StructureRequest,
+    IncomeCadence, ProposedTerms, SelectRequest, StructureRequest,
     StructureResult, TermsRequest,
 )
 from . import structure as structure_service
@@ -67,8 +67,8 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="Credit Memo Builder API",
-    description="Backend for South River Capital's athlete-loan credit memos.",
+    title="Non-Sports Loan Builder API",
+    description="Backend for South River Capital's non-sports loan credit memos.",
     version="1.0.0",
 )
 
@@ -289,9 +289,9 @@ def loandocs_defaults() -> dict:
     return loandocs_service.bank_defaults()
 
 
-@app.post("/api/loandocs/extract", response_model=TeamContractExtraction)
-def loandocs_extract(docs: list[UploadedDoc]) -> TeamContractExtraction:
-    """Extract Team & Contract fields (team name/address, league, contract
+@app.post("/api/loandocs/extract", response_model=AssignedContractExtraction)
+def loandocs_extract(docs: list[UploadedDoc]) -> AssignedContractExtraction:
+    """Extract Employer & Contract fields (employer name/address, pattern, contract
     title and date) from an uploaded player contract or other deal documents."""
     if not docs:
         raise HTTPException(status_code=400, detail="No documents provided.")
@@ -436,16 +436,16 @@ def pa_pdf(req: PARequest) -> Response:
 
 # --- Deal structuring ------------------------------------------------------
 
-@app.get("/api/structure/cadences", response_model=list[LeagueCadence])
-def structure_cadences() -> list[LeagueCadence]:
-    """The league pay-cadence defaults, for the tab's league picker."""
-    return list(structure_service.LEAGUE_CADENCES.values())
+@app.get("/api/structure/cadences", response_model=list[IncomeCadence])
+def structure_cadences() -> list[IncomeCadence]:
+    """The pattern pay-cadence defaults, for the tab's pattern picker."""
+    return list(structure_service.INCOME_CADENCES.values())
 
 
-@app.get("/api/structure/cadence/{league}", response_model=LeagueCadence)
-def structure_cadence(league: str) -> LeagueCadence:
-    """The default cadence for one league (unknown leagues get level monthly)."""
-    return structure_service.league_cadence(league)
+@app.get("/api/structure/cadence/{pattern}", response_model=IncomeCadence)
+def structure_cadence(pattern: str) -> IncomeCadence:
+    """The default cadence for one pattern (unknown patterns get level monthly)."""
+    return structure_service.income_cadence(pattern)
 
 
 @app.post("/api/structure/extract", response_model=StructureExtraction)
@@ -483,7 +483,7 @@ def structure_terms(req: TermsRequest) -> ProposedTerms:
     what the borrower's own earnings can actually retire; which one binds is
     reported. Rate/points/term are house defaults, not a priced rate.
     """
-    return structure_service.propose_terms(req.inputs, req.contract_remaining)
+    return structure_service.propose_terms(req.inputs, req.contracted_income)
 
 
 @app.post("/api/structure/debt-service")

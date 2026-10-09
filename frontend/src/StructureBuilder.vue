@@ -8,7 +8,7 @@ const props = defineProps({
   memoTerms: { type: Object, default: () => ({}) },
   // App-owned record of the memo terms this tab carried over ({field: value}),
   // so the memo tab can tell a carried convenience prefill from a figure the
-  // underwriter set — its Spotrac-primary salary supersedes an untouched
+  // underwriter set — its Spotrac-primary qualifying_income supersedes an untouched
   // carried value, never an edited one.
   carriedTerms: { type: Object, default: null },
   memoExtraction: { type: Object, default: null },
@@ -20,17 +20,17 @@ const props = defineProps({
 
 // --- state -----------------------------------------------------------------
 const inputs = reactive({
-  borrower_name: '', league: '', team: '',
-  salary: null, other_income: null, other_debt_annual: null,
-  contract_end: '', salary_guaranteed: true,
-  no_team_contract: false,
-  proposed_contract_value: null, proposed_contract_date: '',
+  borrower_name: '', pattern: '', employer: '',
+  qualifying_income: null, other_income: null, other_debt_annual: null,
+  income_horizon: '', income_contracted: true,
+  no_contracted_income: false,
+  pending_proceeds_value: null, pending_proceeds_date: '',
   cadence: null,
-  bonus_events: [],
+  income_events: [],
   loan_amount: null, interest_rate: null, origination_fee_pct: null,
   funding_date: '', target_term_months: 12,
   expected_exit_date: '', expected_exit_label: '',
-  agent_pct: 0, min_coverage: 1.25,
+  fee_off_gross_pct: 0, min_coverage: 1.25,
   presented_type: '', presented_term_months: null,
 })
 
@@ -47,8 +47,8 @@ const extractNotes = ref('')
 const memoPush = ref('')
 // Maturity as presented in the documents — carried to the memo's terms grid.
 const presentedMaturity = ref('')
-// Spotrac cross-check returned by the extraction: the salary check (memo-tab
-// machinery) plus the team and league as Spotrac lists them. Verification
+// Spotrac cross-check returned by the extraction: the qualifying_income check (memo-tab
+// machinery) plus the employer and pattern as Spotrac lists them. Verification
 // only — the documents stay authoritative.
 const spotrac = ref(null)
 
@@ -127,10 +127,10 @@ const VERDICT_CLASS = {
 }
 
 const salaryVerify = computed(() => {
-  if (inputs.no_team_contract) return null
+  if (inputs.no_contracted_income) return null
   const c = spotrac.value?.check
   if (!c) return null
-  const cur = Number(inputs.salary) || 0
+  const cur = Number(inputs.qualifying_income) || 0
   const spo = Number(c.spotrac_salary) || 0
   let verdict
   if (spo && cur) {
@@ -153,14 +153,14 @@ const salaryVerifyMsg = computed(() => {
     case 'mismatch': return `⚠ ${tag} cap hit is ${money(v.spotrac_salary)} — verify against the executed contract.`
     case 'spotrac_only': return `⚠ ${tag} cap hit is ${money(v.spotrac_salary)} — the documents produced no figure.`
     case 'docs_only': return `${tag}: no usable figure — documents only.`
-    default: return 'Spotrac check could not be run — verify the salary manually.'
+    default: return 'Spotrac check could not be run — verify the qualifying_income manually.'
   }
 })
 
 const showUseSpotrac = computed(() =>
   ['mismatch', 'spotrac_only'].includes(salaryVerify.value?.verdict))
 
-// Team/league names rarely match character-for-character ("the Denver Broncos
+// Employer/pattern names rarely match character-for-character ("the Denver Broncos
 // Football Club" vs "Denver Broncos"), so equality is containment either way
 // on a normalized form — a mismatch flag on a cosmetic difference would teach
 // the user to ignore the line.
@@ -169,7 +169,7 @@ function normName(s) {
     .replace(/\s+/g, ' ').trim()
 }
 function nameVerify(cur, spo, what) {
-  if (inputs.no_team_contract || spotrac.value === null) return null
+  if (inputs.no_contracted_income || spotrac.value === null) return null
   if (!spo) return cur ? { verdict: 'docs_only', msg: `Spotrac: no ${what} found — documents only.` } : null
   const a = normName(cur), b = normName(spo)
   if (!a) return { verdict: 'spotrac_only', msg: `⚠ Spotrac lists ${spo} — the documents produced none.`, value: spo }
@@ -178,13 +178,13 @@ function nameVerify(cur, spo, what) {
     : { verdict: 'mismatch', msg: `⚠ Spotrac lists ${spo} — verify.`, value: spo }
 }
 
-const teamVerify = computed(() => nameVerify(inputs.team, spotrac.value?.team, 'team'))
-const leagueVerify = computed(() => nameVerify(inputs.league, spotrac.value?.league, 'league'))
+const teamVerify = computed(() => nameVerify(inputs.employer, spotrac.value?.employer, 'employer'))
+const leagueVerify = computed(() => nameVerify(inputs.pattern, spotrac.value?.pattern, 'pattern'))
 
-// The league drives the pay-cadence default, so taking Spotrac's league must
+// The pattern drives the pay-cadence default, so taking Spotrac's pattern must
 // also reload the cadence (the input's @change doesn't fire on programmatic sets).
 async function useSpotracLeague() {
-  inputs.league = spotrac.value.league
+  inputs.pattern = spotrac.value.pattern
   await loadCadence()
 }
 
@@ -194,9 +194,9 @@ async function pullFromMemo() {
   const ed = props.memoExtraction || {}
 
   if (t.name) inputs.borrower_name = t.name
-  if (t.team) inputs.team = t.team
-  if (t.league) inputs.league = t.league
-  if (t.salary) inputs.salary = t.salary
+  if (t.employer) inputs.employer = t.employer
+  if (t.pattern) inputs.pattern = t.pattern
+  if (t.qualifying_income) inputs.qualifying_income = t.qualifying_income
   if (t.loan) inputs.loan_amount = t.loan
   if (t.rate) inputs.interest_rate = t.rate
   if (t.fee) inputs.origination_fee_pct = t.fee
@@ -204,12 +204,12 @@ async function pullFromMemo() {
 
   // Timing/certainty detail the extraction already carries.
   if (ed.other_income) inputs.other_income = ed.other_income
-  if (ed.contract_end) inputs.contract_end = normalizeDate(ed.contract_end)
-  if (ed.salary_guarantee_note) {
+  if (ed.income_horizon) inputs.income_horizon = normalizeDate(ed.income_horizon)
+  if (ed.income_commitment_note) {
     // "Yes — one-way SPC" / "Conditional …" — anything qualified is NOT a
     // clean guarantee, and that flips which structures make sense.
-    inputs.salary_guaranteed = /^\s*yes\b/i.test(ed.salary_guarantee_note)
-      && !/conditional/i.test(ed.salary_guarantee_note)
+    inputs.income_contracted = /^\s*yes\b/i.test(ed.income_commitment_note)
+      && !/conditional/i.test(ed.income_commitment_note)
   }
 
   // Annual non-facility debt service, computed by the BACKEND using the credit
@@ -219,7 +219,7 @@ async function pullFromMemo() {
   const ds = await structureDebtService({ ...t, fund: inputs.funding_date || t.fund || null }, ed)
   if (ds && ds.annual) inputs.other_debt_annual = ds.annual
   pfsNote.value = (ds && ds.note) || ''
-  if (ed.contract_remaining) contractRemaining.value = ed.contract_remaining
+  if (ed.contracted_income) contractRemaining.value = ed.contracted_income
 
   // Term as presented, for the side-by-side.
   if (t.fund && t.mat) {
@@ -274,57 +274,57 @@ async function readDocuments() {
     const ed = await structureExtract(files.value)
 
     const direct = {
-      borrower_name: ed.borrower_name, team: ed.team, league: ed.league,
-      salary: ed.salary, other_income: ed.other_income,
+      borrower_name: ed.borrower_name, employer: ed.employer, pattern: ed.pattern,
+      qualifying_income: ed.qualifying_income, other_income: ed.other_income,
       other_debt_annual: ed.other_debt_annual,
       loan_amount: ed.loan_amount, interest_rate: ed.interest_rate,
       origination_fee_pct: ed.origination_fee_pct,
       presented_type: ed.presented_type,
       expected_exit_label: ed.expected_exit_label,
     }
-    // "No team contract" checked: the contract fields stay untouched (the
-    // loandocs precedent — its pull and readers skip team/league while checked).
-    if (inputs.no_team_contract) {
-      delete direct.team
-      delete direct.league
-      delete direct.salary
+    // "No employer contract" checked: the contract fields stay untouched (the
+    // loandocs precedent — its pull and readers skip employer/pattern while checked).
+    if (inputs.no_contracted_income) {
+      delete direct.employer
+      delete direct.pattern
+      delete direct.qualifying_income
     }
     for (const [k, v] of Object.entries(direct)) {
       if (v !== null && v !== undefined && v !== '') inputs[k] = v
     }
 
     // Spotrac cross-check (run by the backend): verification lines under the
-    // salary / team / league fields. A field is FILLED from Spotrac only when
-    // the documents produced nothing — clearly labeled below, and the league
+    // qualifying_income / employer / pattern fields. A field is FILLED from Spotrac only when
+    // the documents produced nothing — clearly labeled below, and the pattern
     // fill lands before loadCadence() so the right pay-cadence default seeds.
     spotrac.value = (ed.salary_check || ed.spotrac_team || ed.spotrac_league)
-      ? { check: ed.salary_check || null, team: ed.spotrac_team || '', league: ed.spotrac_league || '' }
+      ? { check: ed.salary_check || null, employer: ed.spotrac_team || '', pattern: ed.spotrac_league || '' }
       : null
     const fromSpotrac = []
-    if (!inputs.no_team_contract) {
-      if (!inputs.salary && spotrac.value?.check?.spotrac_salary) {
-        inputs.salary = spotrac.value.check.spotrac_salary
-        fromSpotrac.push('guaranteed salary')
+    if (!inputs.no_contracted_income) {
+      if (!inputs.qualifying_income && spotrac.value?.check?.spotrac_salary) {
+        inputs.qualifying_income = spotrac.value.check.spotrac_salary
+        fromSpotrac.push('guaranteed qualifying_income')
       }
-      if (!inputs.team && spotrac.value?.team) {
-        inputs.team = spotrac.value.team
-        fromSpotrac.push('team')
+      if (!inputs.employer && spotrac.value?.employer) {
+        inputs.employer = spotrac.value.employer
+        fromSpotrac.push('employer')
       }
-      if (!inputs.league && spotrac.value?.league) {
-        inputs.league = spotrac.value.league
-        fromSpotrac.push('league')
+      if (!inputs.pattern && spotrac.value?.pattern) {
+        inputs.pattern = spotrac.value.pattern
+        fromSpotrac.push('pattern')
       }
     }
 
-    const dateFills = inputs.no_team_contract
+    const dateFills = inputs.no_contracted_income
       ? ['funding_date', 'expected_exit_date']
-      : ['contract_end', 'funding_date', 'expected_exit_date']
+      : ['income_horizon', 'funding_date', 'expected_exit_date']
     for (const k of dateFills) {
       if (ed[k]) inputs[k] = normalizeDate(ed[k])
     }
-    if (!inputs.no_team_contract
-        && ed.salary_guaranteed !== null && ed.salary_guaranteed !== undefined) {
-      inputs.salary_guaranteed = ed.salary_guaranteed
+    if (!inputs.no_contracted_income
+        && ed.income_contracted !== null && ed.income_contracted !== undefined) {
+      inputs.income_contracted = ed.income_contracted
     }
     // Term as presented, from funding -> maturity.
     if (ed.maturity_date) presentedMaturity.value = normalizeDate(ed.maturity_date)
@@ -336,8 +336,8 @@ async function readDocuments() {
       }
     }
 
-    // Cadence: start from the league default, then apply anything the documents
-    // actually state. A stated cadence outranks the league default.
+    // Cadence: start from the pattern default, then apply anything the documents
+    // actually state. A stated cadence outranks the pattern default.
     await loadCadence()
     if (ed.pay_frequency) cadence.pay_frequency = ed.pay_frequency
     if (ed.season_start) {
@@ -354,8 +354,8 @@ async function readDocuments() {
       cadence.label = 'From the contract'
     }
 
-    if (Array.isArray(ed.bonus_events) && ed.bonus_events.length) {
-      inputs.bonus_events = ed.bonus_events
+    if (Array.isArray(ed.income_events) && ed.income_events.length) {
+      inputs.income_events = ed.income_events
         .filter((b) => b.date || b.amount)
         .map((b) => ({
           label: b.label || '', date: normalizeDate(b.date),
@@ -364,11 +364,11 @@ async function readDocuments() {
     }
 
     const gaps = []
-    if (!inputs.salary) gaps.push('guaranteed salary')
+    if (!inputs.qualifying_income) gaps.push('guaranteed qualifying_income')
     if (!inputs.loan_amount) gaps.push('loan amount')
     if (!inputs.funding_date) gaps.push('funding date')
     if (!ed.pay_frequency && !ed.season_start) {
-      gaps.push(`pay cadence (using the ${cadence.league || 'default'} league default)`)
+      gaps.push(`pay cadence (using the ${cadence.pattern || 'default'} pattern default)`)
     }
 
     // The PFS is read the way the credit memo reads it (same rows, same stale-
@@ -376,7 +376,7 @@ async function readDocuments() {
     // adjusted or excluded debt is visible, never silent.
     pfsNote.value = ed.debt_service_note || ''
 
-    extractNotes.value = [ed.notes, ed.salary_guarantee_note, ed.pay_election_note]
+    extractNotes.value = [ed.notes, ed.income_commitment_note, ed.pay_election_note]
       .filter(Boolean).join(' · ')
     readStatus.type = gaps.length ? 'info' : 'ok'
     readStatus.msg = '✓ Read the documents — review below'
@@ -404,20 +404,20 @@ function sendToMemo() {
   if (!t) return
   const map = {
     name: inputs.borrower_name,
-    team: inputs.team,
-    league: inputs.league,
-    salary: Number(inputs.salary) || null,
+    employer: inputs.employer,
+    pattern: inputs.pattern,
+    qualifying_income: Number(inputs.qualifying_income) || null,
     loan: Number(inputs.loan_amount) || null,
     rate: Number(inputs.interest_rate) || null,
     fee: Number(inputs.origination_fee_pct) || null,
     fund: inputs.funding_date,
     mat: presentedMaturity.value,
   }
-  // No team contract: never carry contract-derived fields to the memo.
-  if (inputs.no_team_contract) {
-    delete map.team
-    delete map.league
-    delete map.salary
+  // No employer contract: never carry contract-derived fields to the memo.
+  if (inputs.no_contracted_income) {
+    delete map.employer
+    delete map.pattern
+    delete map.qualifying_income
   }
   let filled = 0
   for (const [k, v] of Object.entries(map)) {
@@ -438,7 +438,7 @@ function sendToMemo() {
 
 // --- cadence ---------------------------------------------------------------
 async function loadCadence() {
-  const c = await structureCadence(inputs.league || 'none')
+  const c = await structureCadence(inputs.pattern || 'none')
   if (c) Object.assign(cadence, c)
 }
 
@@ -448,36 +448,36 @@ function resetCadence() {
 
 // --- bonus events ----------------------------------------------------------
 function addBonus() {
-  inputs.bonus_events.push({ label: '', date: '', amount: null, guaranteed: true })
+  inputs.income_events.push({ label: '', date: '', amount: null, guaranteed: true })
 }
 function removeBonus(i) {
-  inputs.bonus_events.splice(i, 1)
+  inputs.income_events.splice(i, 1)
 }
 
 // --- run -------------------------------------------------------------------
 function payload() {
   return {
     ...inputs,
-    // No team contract: the server enforces this too (propose_structures zeroes
-    // the salary), but sending it zeroed keeps every consumer consistent.
-    salary: inputs.no_team_contract ? 0 : Number(inputs.salary) || 0,
-    salary_guaranteed: inputs.no_team_contract ? false : inputs.salary_guaranteed,
-    proposed_contract_value: Number(inputs.proposed_contract_value) || 0,
-    proposed_contract_date: inputs.proposed_contract_date || null,
+    // No employer contract: the server enforces this too (propose_structures zeroes
+    // the qualifying_income), but sending it zeroed keeps every consumer consistent.
+    qualifying_income: inputs.no_contracted_income ? 0 : Number(inputs.qualifying_income) || 0,
+    income_contracted: inputs.no_contracted_income ? false : inputs.income_contracted,
+    pending_proceeds_value: Number(inputs.pending_proceeds_value) || 0,
+    pending_proceeds_date: inputs.pending_proceeds_date || null,
     other_income: Number(inputs.other_income) || 0,
     other_debt_annual: Number(inputs.other_debt_annual) || 0,
     loan_amount: Number(inputs.loan_amount) || 0,
     interest_rate: Number(inputs.interest_rate) || 0,
     origination_fee_pct: Number(inputs.origination_fee_pct) || 0,
     target_term_months: Number(inputs.target_term_months) || 12,
-    agent_pct: Number(inputs.agent_pct) || 0,
+    fee_off_gross_pct: Number(inputs.fee_off_gross_pct) || 0,
     min_coverage: Number(inputs.min_coverage) || 1.25,
     presented_term_months: Number(inputs.presented_term_months) || 0,
-    contract_end: inputs.contract_end || null,
+    income_horizon: inputs.income_horizon || null,
     funding_date: inputs.funding_date || null,
     expected_exit_date: inputs.expected_exit_date || null,
     cadence: cadence.pay_frequency ? { ...cadence } : null,
-    bonus_events: inputs.bonus_events
+    income_events: inputs.income_events
       .filter((b) => b.date && Number(b.amount))
       .map((b) => ({ ...b, amount: Number(b.amount), date: b.date })),
   }
@@ -509,8 +509,8 @@ async function proposeTerms() {
   termsErr.value = ''
   try {
     // No-contract mode sizes against the proposed contract server-side; the
-    // (executed) contract-remaining figure must not leak in as an LTC basis.
-    const remaining = inputs.no_team_contract ? null : Number(contractRemaining.value) || null
+    // (executed) contract-remaining figure must not leak in as an LTI basis.
+    const remaining = inputs.no_contracted_income ? null : Number(contractRemaining.value) || null
     terms.value = await structureProposeTerms(payload(), remaining)
   } catch (err) {
     termsErr.value = err.message
@@ -564,8 +564,8 @@ function applyToLoanDocs() {
   store.amortization_type = push.amortization_type
   if (push.maturity_date) store.maturity_date = push.maturity_date
   // Carry the no-contract state to Loan Documents, where it already blanks the
-  // cover's Team/Contract and drops the Payment Direction Letter.
-  if (inputs.no_team_contract) store.no_team_contract = true
+  // cover's Employer/Contract and drops the Payment Direction Letter.
+  if (inputs.no_contracted_income) store.no_contracted_income = true
   if (!store.loan_amount && inputs.loan_amount) store.loan_amount = Number(inputs.loan_amount)
   if (!store.interest_rate && inputs.interest_rate) store.interest_rate = Number(inputs.interest_rate)
   applied.value = `✓ ${push.name} applied — ${push.repayment_schedule.length} payment(s) `
@@ -612,43 +612,43 @@ function applyToLoanDocs() {
     <p class="hint">Everything here is editable — correct anything the documents got wrong.</p>
 
     <label class="inline chk nocontract">
-      <input type="checkbox" v-model="inputs.no_team_contract" />
-      Athlete does not have a contract with a Team / employer
+      <input type="checkbox" v-model="inputs.no_contracted_income" />
+      Athlete does not have a contract with a Employer / employer
     </label>
-    <p v-if="inputs.no_team_contract" class="hint note">
-      🏳 No team contract: the projection runs on <strong>Other income (annual)</strong>
-      and the dated payments in Step 4 only — no salary, no salary cadence. The
+    <p v-if="inputs.no_contracted_income" class="hint note">
+      🏳 No employer contract: the projection runs on <strong>Other income (annual)</strong>
+      and the dated payments in Step 4 only — no qualifying_income, no qualifying_income cadence. The
       contract fields below are ignored, and selecting a structure will carry this
       to the Loan Documents tab (which drops the Payment Direction Letter).
       If a <strong>proposed contract</strong> is on the table, enter it here: it sizes
-      the loan (30% LTC, flagged for credit approval) and its signing becomes the
+      the loan (30% LTI, flagged for credit approval) and its signing becomes the
       exit event — but nothing is projected as income until it is executed.
     </p>
-    <div v-if="inputs.no_team_contract" class="grid">
+    <div v-if="inputs.no_contracted_income" class="grid">
       <label>Proposed contract — guaranteed value
-        <input v-model.number="inputs.proposed_contract_value" type="number"
+        <input v-model.number="inputs.pending_proceeds_value" type="number"
                placeholder="unexecuted — sizes the loan" />
       </label>
       <label>Expected signing date
-        <input v-model="inputs.proposed_contract_date" type="date" />
+        <input v-model="inputs.pending_proceeds_date" type="date" />
       </label>
     </div>
 
     <div class="grid">
       <label>Borrower <input v-model="inputs.borrower_name" /></label>
-      <label>Team
-        <input v-model="inputs.team" :disabled="inputs.no_team_contract" />
+      <label>Employer
+        <input v-model="inputs.employer" :disabled="inputs.no_contracted_income" />
         <span v-if="teamVerify" :class="['verify', VERDICT_CLASS[teamVerify.verdict]]">
           {{ teamVerify.msg }}
           <button v-if="teamVerify.value" type="button" class="use"
-                  @click="inputs.team = spotrac.team">Use Spotrac</button>
+                  @click="inputs.employer = spotrac.employer">Use Spotrac</button>
         </span>
       </label>
-      <label>League
-        <input v-model="inputs.league" list="leagues" @change="loadCadence"
-               :disabled="inputs.no_team_contract" placeholder="NFL / NBA / MLB / NHL / MLS" />
-        <datalist id="leagues">
-          <option v-for="c in cadences" :key="c.league" :value="c.league" />
+      <label>Pattern
+        <input v-model="inputs.pattern" list="patterns" @change="loadCadence"
+               :disabled="inputs.no_contracted_income" placeholder="NFL / NBA / MLB / NHL / MLS" />
+        <datalist id="patterns">
+          <option v-for="c in cadences" :key="c.pattern" :value="c.pattern" />
         </datalist>
         <span v-if="leagueVerify" :class="['verify', VERDICT_CLASS[leagueVerify.verdict]]">
           {{ leagueVerify.msg }}
@@ -656,12 +656,12 @@ function applyToLoanDocs() {
                   @click="useSpotracLeague">Use Spotrac</button>
         </span>
       </label>
-      <label>Guaranteed season salary
-        <input v-model.number="inputs.salary" type="number" :disabled="inputs.no_team_contract" />
+      <label>Guaranteed season qualifying_income
+        <input v-model.number="inputs.qualifying_income" type="number" :disabled="inputs.no_contracted_income" />
         <span v-if="salaryVerify" :class="['verify', VERDICT_CLASS[salaryVerify.verdict]]">
           {{ salaryVerifyMsg }}
           <button v-if="showUseSpotrac" type="button" class="use"
-                  @click="inputs.salary = salaryVerify.spotrac_salary">Use Spotrac figure</button>
+                  @click="inputs.qualifying_income = salaryVerify.spotrac_salary">Use Spotrac figure</button>
           <a v-if="salaryVerify.spotrac_url" :href="salaryVerify.spotrac_url"
              target="_blank" rel="noopener">view&nbsp;↗</a>
         </span>
@@ -669,9 +669,9 @@ function applyToLoanDocs() {
       </label>
       <label>Other income (annual) <input v-model.number="inputs.other_income" type="number" /></label>
       <label>Other debt service (annual) <input v-model.number="inputs.other_debt_annual" type="number" /></label>
-      <label>Contract end <input v-model="inputs.contract_end" type="date" :disabled="inputs.no_team_contract" /></label>
+      <label>Contract end <input v-model="inputs.income_horizon" type="date" :disabled="inputs.no_contracted_income" /></label>
       <label class="inline chk">
-        <input type="checkbox" v-model="inputs.salary_guaranteed" :disabled="inputs.no_team_contract" />
+        <input type="checkbox" v-model="inputs.income_contracted" :disabled="inputs.no_contracted_income" />
         Salary is fully guaranteed
       </label>
     </div>
@@ -686,14 +686,14 @@ function applyToLoanDocs() {
     <h2><span class="step">3</span> Terms being tested</h2>
     <div class="grid">
       <label>Total remaining contract value
-        <input v-model.number="contractRemaining" type="number" placeholder="LTC basis — else season salary" /></label>
+        <input v-model.number="contractRemaining" type="number" placeholder="LTI basis — else season qualifying_income" /></label>
     </div>
     <button class="ghost" :disabled="proposing" @click="proposeTerms">
-      {{ proposing ? 'Working…' : inputs.no_team_contract
+      {{ proposing ? 'Working…' : inputs.no_contracted_income
         ? '✨ Propose terms from the proposed contract' : '✨ Propose terms from the contract' }}
     </button>
-    <p v-if="inputs.no_team_contract" class="hint">
-      No executed contract: the amount is capped at 30% LTC of the <strong>Proposed
+    <p v-if="inputs.no_contracted_income" class="hint">
+      No executed contract: the amount is capped at 30% LTI of the <strong>Proposed
       contract value</strong> in Step 2 — flagged for credit approval — and checked
       against the cash flow from other income. With no proposed value, only the
       cash-flow ceiling applies.
@@ -708,7 +708,7 @@ function applyToLoanDocs() {
         <button class="ghost sm" @click="applyTerms">Use these</button>
       </div>
       <div class="metrics">
-        <div><span class="k">Policy limit (LTC)</span><span class="v">{{ money(terms.policy_cap) }}</span></div>
+        <div><span class="k">Policy limit (LTI)</span><span class="v">{{ money(terms.policy_cap) }}</span></div>
         <div><span class="k">Cash-flow capacity</span><span class="v">{{ money(terms.cash_capacity) }}</span></div>
         <div><span class="k">Binding constraint</span><span class="v">{{ terms.binding_constraint }}</span></div>
         <div><span class="k">Can they repay it?</span>
@@ -720,7 +720,7 @@ function applyToLoanDocs() {
     </div>
 
     <p class="hint">
-      The amount is the lower of South River's Loan-to-Contract policy limit and what the
+      The amount is the lower of South River's Loan-to-Income policy limit and what the
       borrower's own earnings can actually retire. Rate and points are house defaults —
       nothing here prices risk, so edit them per deal.
     </p>
@@ -747,7 +747,7 @@ function applyToLoanDocs() {
     <h3 class="sub">Underwriting assumptions</h3>
     <div class="grid">
       <label>Minimum coverage <input v-model.number="inputs.min_coverage" type="number" step="0.05" /></label>
-      <label>Agent commission (%) <input v-model.number="inputs.agent_pct" type="number" step="0.5" /></label>
+      <label>Agent commission (%) <input v-model.number="inputs.fee_off_gross_pct" type="number" step="0.5" /></label>
     </div>
     <p class="hint">
       Taxes (45%) and living expenses (10%) follow the credit memo's rules. Agent
@@ -762,20 +762,20 @@ function applyToLoanDocs() {
   <!-- Step 3: pay cadence -->
   <section class="card">
     <h2><span class="step">4</span> Pay cadence</h2>
-    <p v-if="inputs.no_team_contract" class="hint note">
-      🏳 No team contract — the salary cadence is not used. Income comes from
+    <p v-if="inputs.no_contracted_income" class="hint note">
+      🏳 No employer contract — the qualifying_income cadence is not used. Income comes from
       Other income (annual, spread evenly) and the dated payments below, which
       are what the candidate structures will be scored against.
     </p>
-    <template v-if="!inputs.no_team_contract">
-    <p v-if="cadence.label" class="cad-label">{{ cadence.league || 'Custom' }} — {{ cadence.label }}</p>
+    <template v-if="!inputs.no_contracted_income">
+    <p v-if="cadence.label" class="cad-label">{{ cadence.pattern || 'Custom' }} — {{ cadence.label }}</p>
     <p v-if="leagueVerify && leagueVerify.verdict === 'match'" class="verify ok">
-      ✓ League confirmed on Spotrac — the season window and pay frequency below follow
-      the {{ inputs.league }} default unless the contract stated its own.
+      ✓ Pattern confirmed on Spotrac — the season window and pay frequency below follow
+      the {{ inputs.pattern }} default unless the contract stated its own.
     </p>
     <p v-else-if="leagueVerify && leagueVerify.verdict === 'mismatch'" class="verify warn">
-      ⚠ Spotrac lists a different league ({{ spotrac.league }}) — the season window and
-      pay frequency below follow the league in Step 2, so settle that first.
+      ⚠ Spotrac lists a different pattern ({{ spotrac.pattern }}) — the season window and
+      pay frequency below follow the pattern in Step 2, so settle that first.
     </p>
     <div class="grid">
       <label>Pay frequency
@@ -805,16 +805,16 @@ function applyToLoanDocs() {
       </label>
     </div>
     <p v-if="cadence.notes" class="hint">{{ cadence.notes }}</p>
-    <button class="ghost" @click="resetCadence">↻ Reset to the league default</button>
+    <button class="ghost" @click="resetCadence">↻ Reset to the pattern default</button>
     </template>
 
     <h3 class="sub">Bonuses &amp; dated lump payments</h3>
-    <table v-if="inputs.bonus_events.length" class="cover-tbl">
+    <table v-if="inputs.income_events.length" class="cover-tbl">
       <thead>
         <tr><th>Label</th><th>Date</th><th>Amount</th><th>Guaranteed</th><th></th></tr>
       </thead>
       <tbody>
-        <tr v-for="(b, i) in inputs.bonus_events" :key="i">
+        <tr v-for="(b, i) in inputs.income_events" :key="i">
           <td><input v-model="b.label" placeholder="Signing bonus installment" /></td>
           <td><input v-model="b.date" type="date" /></td>
           <td><input v-model.number="b.amount" type="number" /></td>
@@ -826,7 +826,7 @@ function applyToLoanDocs() {
     <button class="ghost" @click="addBonus">+ Add a bonus / lump payment</button>
     <p class="hint">
       Signing-bonus installments, roster bonuses, endorsement milestones. These land
-      on their own date rather than following the salary cadence — an NHL July 1
+      on their own date rather than following the qualifying_income cadence — an NHL July 1
       bonus is often the largest cash event of the year, and a natural balloon date.
     </p>
   </section>
