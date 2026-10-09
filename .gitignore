@@ -24,8 +24,14 @@ dist/
 .vscode/
 *.swp
 
-# Runtime logs
-logs/
+# Runtime logs. The LAUNCHER SCRIPTS live in logs/ too (the athlete builder's
+# layout, kept so the path is the one Lauren already knows) and are committed -
+# a clone without them cannot start the app. Note `logs/*` rather than `logs/`:
+# git does not descend into an excluded DIRECTORY, so a negation inside one
+# never matches.
+logs/*
+!logs/*.ps1
+!logs/*.bat
 *.log
 
 # Participation Agreement Builder — local dev tooling & data.
