@@ -1,0 +1,169 @@
+<style>
+:root{--navy:#0f2a43;--navy-2:#1c3d5a;--gold:#b9952b;--ink:#1a1a1a;--ink-soft:#444;--rule:#cdd3da;--rule-strong:#9aa6b2;--paper:#fff;--desk:#e9e7e0;--zebra:#f4f6f8;}
+*{box-sizing:border-box;}
+body{background:var(--desk);font-family:"Times New Roman",Times,serif;font-size:10pt;line-height:1.42;color:var(--ink);padding:32px 16px 64px;}
+.page{background:var(--paper);width:7.5in;margin:0 auto;padding:.45in .5in .5in;box-shadow:0 1px 6px rgba(0,0,0,.18);}
+h2.sec{font-size:11.5pt;font-weight:bold;color:#000;text-transform:uppercase;letter-spacing:.04em;margin:16pt 0 8pt;padding-bottom:4pt;border-bottom:1.5pt solid var(--navy);}
+h2.sec:first-of-type{margin-top:0;}
+.masthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--navy);padding-bottom:10pt;margin-bottom:4pt;}
+.brand-logo{height:34pt;}
+.doc-meta{text-align:right;font-family:Arial,Helvetica,sans-serif;font-size:8pt;color:var(--ink-soft);}
+.doc-meta .conf{font-size:7pt;font-weight:bold;letter-spacing:.18em;color:#fff;background:var(--gold);padding:2pt 6pt;display:inline-block;text-transform:uppercase;margin-bottom:4pt;}
+.doc-title{text-align:center;margin:14pt 0 16pt;}
+.doc-title .kicker{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;letter-spacing:.4em;color:var(--gold);text-transform:uppercase;font-weight:bold;}
+.doc-title h1{font-size:17pt;margin:4pt 0 0;letter-spacing:.02em;}
+table{width:100%;border-collapse:collapse;margin:6pt 0;}
+th,td{border:.5pt solid var(--rule);padding:3pt 5pt;text-align:left;vertical-align:top;}
+thead th{background:var(--navy);color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;border-color:var(--navy-2);}
+table.kv td.k{background:var(--zebra);font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;color:var(--navy);width:1.35in;}
+.num{text-align:right;white-space:nowrap;}
+.neg{color:#a3001c;}
+.callout{background:var(--zebra);border-left:3pt solid var(--navy);padding:7pt 10pt;margin:8pt 0;}
+.callout p{margin:0;}
+.rec-band{background:var(--navy);color:#fff;padding:8pt 11pt;margin:8pt 0 4pt;}
+.rec-band .lab{font-family:Arial,Helvetica,sans-serif;font-size:7pt;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);font-weight:bold;}
+.rec-band .nm{font-size:13pt;font-weight:bold;margin-top:2pt;}
+.opt{border:.75pt solid var(--rule-strong);margin:7pt 0;padding:7pt 9pt;page-break-inside:avoid;}
+.opt.rec{border-color:var(--gold);border-width:1.5pt;background:#fefcf5;}
+.opt-head{display:flex;justify-content:space-between;align-items:baseline;gap:8pt;border-bottom:.5pt solid var(--rule);padding-bottom:3pt;margin-bottom:4pt;}
+.opt-name{font-size:11pt;font-weight:bold;color:var(--navy);}
+.badge{font-family:Arial,Helvetica,sans-serif;font-size:6.5pt;font-weight:bold;letter-spacing:.1em;padding:1.5pt 5pt;text-transform:uppercase;}
+.badge.pass{background:#e8f5ee;color:#0f6e56;}
+.badge.fail{background:#fdecea;color:#a3001c;}
+.badge.rec{background:var(--gold);color:#fff;}
+.rationale{margin:0 0 5pt;font-size:9pt;color:var(--ink-soft);}
+.metrics{display:flex;flex-wrap:wrap;gap:14pt;margin:4pt 0;}
+.metrics .m .k{font-family:Arial,Helvetica,sans-serif;font-size:6.5pt;text-transform:uppercase;letter-spacing:.06em;color:#777;display:block;}
+.metrics .m .v{font-size:10pt;font-weight:bold;color:var(--navy);}
+.warn{font-size:8.5pt;color:#7a4f00;background:#fdf8ec;border-left:2.5pt solid #d9a441;padding:3pt 7pt;margin:3pt 0;}
+.flow td,.flow th{padding:2pt 5pt;font-size:8.5pt;}
+.flow tr.dry td{background:#fbfaf3;color:#666;}
+.bar{display:inline-block;height:7pt;background:var(--navy);vertical-align:middle;}
+.bar.neg{background:#c9788a;}
+.note{font-size:8.5pt;color:var(--ink-soft);margin:2pt 0;}
+.foot{margin-top:14pt;border-top:.5pt solid var(--rule);padding-top:6pt;font-size:8pt;color:#777;}
+@page{size:Letter;margin:.5in .55in .7in;}
+@media print{
+  body{background:#fff;padding:0;}
+  .page{width:auto;box-shadow:none;padding:0;}
+  .opt{page-break-inside:avoid;}
+  .pgbreak{page-break-before:always;}
+}
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <div class="brand"><img class="brand-logo" src="{{ logo }}" alt="South River Capital"></div>
+    <div class="doc-meta">
+      <div class="conf">Internal — Credit</div>
+      <div>Prepared {{ today }}</div>
+    </div>
+  </header>
+
+  <div class="doc-title">
+    <div class="kicker">South River Capital</div>
+    <h1>Proposed Loan Structure</h1>
+  </div>
+
+  <table class="kv"><tbody>
+    <tr><td class="k">Borrower</td><td>{{ borrower or "—" }}</td>
+        <td class="k">Team / League</td><td>{{ team or "—" }}{% if league %} — {{ league }}{% endif %}</td></tr>
+    <tr><td class="k">Facility</td><td>{{ loan_money }} at {{ rate }}% p.a.{% if points %}, {{ points }} pts{% endif %}</td>
+        <td class="k">Funding</td><td>{{ funding or "—" }}</td></tr>
+    <tr><td class="k">Guaranteed salary</td><td>{{ salary_money }}{% if not guaranteed %} <strong>(not fully guaranteed)</strong>{% endif %}</td>
+        <td class="k">Pay cadence</td><td>{{ cadence_label }}</td></tr>
+    <tr><td class="k">As presented</td><td>{{ presented or "—" }}</td>
+        <td class="k">Loan vs. annual cash</td><td>{{ leverage }}</td></tr>
+  </tbody></table>
+
+  <h2 class="sec">Recommendation</h2>
+  {% if recommended %}
+  <div class="rec-band">
+    <div class="lab">Recommended structure</div>
+    <div class="nm">{{ recommended.name }}</div>
+  </div>
+  <div class="callout"><p>{{ recommended.rationale }}</p></div>
+  {% else %}
+  <div class="callout"><p>No structure clears the coverage test on this deal as sized.</p></div>
+  {% endif %}
+
+  <p class="note">
+    Cash available for this facility is {{ annual_available_money }} a year after tax (45%),
+    ordinary living expenses (10%) and existing debt service — the same basis as the credit
+    memorandum. Coverage is shown two ways: against the cash arriving in the month a payment
+    falls due, and against cash banked to that point, since in-season earnings carry the
+    borrower through the offseason.
+  </p>
+
+  <h2 class="sec">Options Considered</h2>
+  {% for c in candidates %}
+  <div class="opt{% if c.recommended %} rec{% endif %}">
+    <div class="opt-head">
+      <span class="opt-name">{{ loop.index }}. {{ c.name }}</span>
+      <span>
+        <span class="badge {% if c.passes %}pass{% else %}fail{% endif %}">{{ "Passes" if c.passes else "Fails" }}</span>
+        {% if c.recommended %}<span class="badge rec">Recommended</span>{% endif %}
+      </span>
+    </div>
+    <p class="rationale">{{ c.rationale }}</p>
+    <div class="metrics">
+      <div class="m"><span class="k">Payments</span><span class="v">{{ c.payments|length }}</span></div>
+      <div class="m"><span class="k">Matures</span><span class="v">{{ c.maturity_fmt }}</span></div>
+      <div class="m"><span class="k">Total interest</span><span class="v">{{ c.interest_money }}</span></div>
+      {% if c.interest_reserve %}<div class="m"><span class="k">Interest reserve</span><span class="v">{{ c.reserve_money }}</span></div>{% endif %}
+      <div class="m"><span class="k">Coverage, tightest month</span>
+        <span class="v{% if c.min_coverage < min_coverage %} neg{% endif %}">{{ "%.2f"|format(c.min_coverage) }}x{% if c.tightest_month %} ({{ c.tightest_month }}){% endif %}</span></div>
+      <div class="m"><span class="k">Coverage on banked cash</span>
+        <span class="v{% if c.min_cushion_coverage < 1 %} neg{% endif %}">{{ "%.2f"|format(c.min_cushion_coverage) }}x</span></div>
+    </div>
+    {% for w in c.warnings %}<p class="warn">{{ w }}</p>{% endfor %}
+  </div>
+  {% endfor %}
+
+  <div class="pgbreak"></div>
+  <h2 class="sec">Projected Cash Flow</h2>
+  <table class="flow">
+    <thead><tr><th>Month</th><th>In season</th><th class="num">Gross</th><th class="num">Available</th><th class="num">Cumulative</th><th style="width:32%">Shape</th></tr></thead>
+    <tbody>
+      {% for m in cash_flow %}
+      <tr{% if not m.in_season %} class="dry"{% endif %}>
+        <td>{{ m.label }}</td>
+        <td style="text-align:center">{{ "•" if m.in_season else "" }}</td>
+        <td class="num">{{ m.gross_money }}</td>
+        <td class="num{% if m.available < 0 %} neg{% endif %}">{{ m.available_money }}</td>
+        <td class="num{% if m.cumulative < 0 %} neg{% endif %}">{{ m.cumulative_money }}</td>
+        <td><span class="bar{% if m.available < 0 %} neg{% endif %}" style="width:{{ m.bar_pct }}%;margin-left:{{ m.bar_off }}%"></span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% for n in notes %}<p class="note">· {{ n }}</p>{% endfor %}
+
+  {% if recommended %}
+  <h2 class="sec">{{ recommended.name }} — Repayment Schedule</h2>
+  <table>
+    <thead><tr><th>#</th><th>Date</th><th class="num">Interest</th><th class="num">Principal</th><th class="num">Total</th><th class="num">Cash that month</th><th class="num">Coverage</th></tr></thead>
+    <tbody>
+      {% for p in recommended.payments %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ p.date }}</td>
+        <td class="num">{{ p.interest_money }}</td>
+        <td class="num">{{ p.principal_money }}</td>
+        <td class="num"><strong>{{ p.total_money }}</strong></td>
+        <td class="num{% if p.month_available < 0 %} neg{% endif %}">{{ p.avail_money }}</td>
+        <td class="num{% if p.coverage < min_coverage %} neg{% endif %}">{{ "%.2f"|format(p.coverage) }}x</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="foot">
+    Structure derived from the borrower's projected cash flow and the
+    {{ cadence_source }}. Taxes and ordinary living expenses follow South River
+    Capital's standard underwriting basis (45% / 10%). Interest accrues actual/365.
+    Minimum coverage tested at {{ "%.2f"|format(min_coverage) }}x. This summary is an
+    internal credit document and is not a commitment to lend.
+  </div>
+</div>

@@ -1,0 +1,42 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Runtime logs
+logs/
+*.log
+
+# Participation Agreement Builder — local dev tooling & data.
+# The whole tools/ dir stays local: the build script and the captured struct/
+# data files contain REAL deal data (borrower names, loan #s, amounts), which
+# must never be committed to this public repo. The committed templates
+# (app/templates/participation_agreement_*.docx) hold only {{ placeholders }}.
+backend/tools/
+
+frontend/public/_bd_test.xlsx
+.claude/
+
+# Generated PA field-test renders — contain real deal data, never commit (public repo)
+_fieldtest_*.pdf

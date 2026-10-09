@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Credit Memorandum — South River Capital — {{ name }}</title>
+<style>
+:root{--navy:#0f2a43;--navy-2:#1c3d5a;--gold:#b9952b;--ink:#1a1a1a;--ink-soft:#444;--rule:#cdd3da;--rule-strong:#9aa6b2;--paper:#fff;--desk:#e9e7e0;--zebra:#f4f6f8;}
+*{box-sizing:border-box;}html,body{margin:0;padding:0;}
+body{background:var(--desk);font-family:"Times New Roman",Times,serif;font-size:10pt;line-height:1.42;color:var(--ink);-webkit-font-smoothing:antialiased;padding:32px 16px 64px;}
+.page{width:8.5in;min-height:11in;background:var(--paper);margin:0 auto 28px;padding:.7in .75in .85in;box-shadow:0 2px 14px rgba(0,0,0,.12);border-radius:2px;position:relative;}
+p{margin:0 0 7pt;text-wrap:pretty;}.lead{margin-bottom:9pt;}strong{font-weight:bold;}
+.section{margin-top:16pt;}.section:first-of-type{margin-top:0;}
+h2.sec{font-size:11.5pt;font-weight:bold;color:#000;text-transform:uppercase;letter-spacing:.04em;margin:0 0 8pt;padding-bottom:4pt;border-bottom:1.5pt solid var(--navy);display:flex;align-items:baseline;gap:8pt;}
+h2.sec .num{font-family:Arial,Helvetica,sans-serif;font-size:8pt;font-weight:bold;color:#fff;background:var(--navy);padding:2pt 5pt;letter-spacing:.05em;transform:translateY(-1pt);}
+h3.sub{font-size:10pt;font-weight:bold;color:#000;margin:11pt 0 4pt;text-transform:uppercase;letter-spacing:.03em;}
+.masthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--navy);padding-bottom:10pt;margin-bottom:4pt;}
+.brand{display:flex;align-items:center;gap:11px;}.brand .brand-logo{height:50px;width:auto;display:block;background:#fff;padding:5px 8px;border-radius:4px;}
+.brand .wm{line-height:1;}.brand .wm .name{font-size:16pt;font-weight:bold;color:var(--navy);letter-spacing:.06em;text-transform:uppercase;}
+.brand .wm .tag{font-family:Arial,Helvetica,sans-serif;font-size:6.5pt;letter-spacing:.32em;color:var(--gold);text-transform:uppercase;margin-top:4px;font-weight:bold;}
+.doc-meta{text-align:right;font-family:Arial,Helvetica,sans-serif;}
+.doc-meta .conf{font-size:7pt;font-weight:bold;letter-spacing:.18em;color:#fff;background:var(--gold);padding:2pt 6pt;display:inline-block;text-transform:uppercase;}
+.doc-meta .dt{font-size:8pt;color:var(--ink-soft);margin-top:6pt;}.doc-meta .dt span{color:var(--ink);font-weight:bold;}
+.doc-title{text-align:center;margin:14pt 0 16pt;}.doc-title .kicker{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;letter-spacing:.4em;color:var(--gold);text-transform:uppercase;font-weight:bold;}
+.doc-title h1{font-size:21pt;font-weight:bold;color:#000;letter-spacing:.04em;margin:5pt 0 0;text-transform:uppercase;}
+table{width:100%;border-collapse:collapse;margin:4pt 0 6pt;font-size:9.5pt;}
+caption{caption-side:top;text-align:left;font-weight:bold;color:#000;padding-bottom:3pt;font-size:9.5pt;}
+th,td{border:.75pt solid var(--rule);padding:3.5pt 7pt;vertical-align:top;text-align:left;}
+thead th{background:var(--navy);color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;border-color:var(--navy-2);}
+table.kv td.k{width:30%;background:#f1f4f7;font-weight:bold;color:#000;white-space:nowrap;}
+table.kv.two td.k{width:22%;}
+.num-col{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+tbody tr.total td{font-weight:bold;background:#eef1f4;border-top:1.25pt solid var(--rule-strong);}
+tbody tr.grand td{font-weight:bold;background:var(--navy);color:#fff;border-color:var(--navy-2);}
+.zebra tbody tr:nth-child(even) td{background:var(--zebra);}
+/* In zebra tables the even-row stripe outranks tr.grand's navy background (equal
+   specificity, later rule), leaving white text on a light stripe whenever the
+   grand row lands on an even index. Re-assert the navy band at higher specificity
+   so the Section VIII Net Cash Flow row always matches the other grand rows
+   (Lauren, 2026-07-28). Literal colors, not var(), so the row also survives
+   Word's HTML engine (which drops var() backgrounds — see render_word). */
+.zebra tbody tr.grand td{background:#0f2a43;color:#fff;border-color:#1c3d5a;}
+.src-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9pt;margin-top:8pt;}
+.src{border:.75pt solid var(--rule);border-top:2.5pt solid var(--navy);padding:7pt 9pt;background:#fafbfc;}
+.src .lab{font-family:Arial,Helvetica,sans-serif;font-size:7pt;letter-spacing:.12em;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:4pt;}
+.src .ord{font-size:8pt;color:#000;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2pt;}
+.callout{border-left:3pt solid #000;background:#fcfbf6;padding:9pt 12pt;margin:6pt 0 8pt;}
+ul.tight{margin:3pt 0 7pt;padding-left:18pt;}ul.tight li{margin-bottom:3pt;}
+.faq{margin-bottom:9pt;}.faq .q{font-weight:bold;color:#000;margin-bottom:2pt;}
+.note-fine{font-size:8.5pt;color:var(--ink-soft);}
+.pg-footer{position:absolute;left:.75in;right:.75in;bottom:.42in;display:flex;justify-content:space-between;align-items:center;font-family:Arial,Helvetica,sans-serif;font-size:6.8pt;letter-spacing:.1em;color:#8a8a8a;text-transform:uppercase;border-top:.75pt solid var(--rule);padding-top:5pt;}
+/* Deal Summary & Policy Compliance coversheet (page 1). Literal colors on the
+   status boxes (not var()) so they survive Word's HTML engine — see render_word. */
+.cover-title{margin:8pt 0 8pt;}
+.cover-title h1{font-size:17pt;}
+.cover-sec{margin-top:9pt;}
+.cover-sec h2.sec{margin-bottom:5pt;}
+.cover-sec h3.sub{margin-top:0;}
+/* Rule 15 — each financed debt listed under the summary liability it rolls into: indented, lighter, and hairline-ruled so it reads as a breakdown of the line above rather than another liability. */tbody tr.dsc td{background:#fbfcfd;font-size:8.5pt;color:var(--ink-soft);border-top-width:.4pt;border-top-style:dotted;padding-top:2.5pt;padding-bottom:2.5pt;}tbody tr.dsc td.dsc-lbl{padding-left:26pt;}.dsc-note{display:block;font-size:7.5pt;color:#6b7683;}table.compliance{font-size:8pt;line-height:1.25;margin:2pt 0 4pt;}
+table.compliance td{padding:2pt 5pt;}
+table.compliance thead th{font-size:7pt;padding:2.5pt 5pt;}
+.st-cell{white-space:nowrap;}
+.st{display:inline-block;font-family:Arial,Helvetica,sans-serif;font-size:6.5pt;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;color:#9aa6b2;border:.75pt solid #cdd3da;background:#fff;padding:1pt 4pt;margin-right:3pt;}
+.st:last-child{margin-right:0;}
+.st.on{background:#0f2a43;border-color:#1c3d5a;color:#fff;}
+.cover-sec .callout{padding:6pt 10pt;margin:3pt 0 4pt;font-size:8.5pt;}
+.approval{display:flex;gap:24pt;margin-top:10pt;break-inside:avoid;}
+.approval .sig{flex:1;}
+.approval .sig-date{flex:0 0 1.5in;}
+.approval .line{border-bottom:1pt solid #1a1a1a;height:14pt;}
+.approval .cap{font-family:Arial,Helvetica,sans-serif;font-size:7pt;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:#444;margin-top:3pt;}
+@page{size:letter;margin:.7in .75in .6in;}
+@media print{body{background:none;padding:0;}.page{width:auto;min-height:0;margin:0;padding:0;box-shadow:none;border-radius:0;break-after:page;}.page:last-child{break-after:auto;}.pg-footer{display:none;}.section,.faq,.src,.callout,tr,thead{break-inside:avoid;}h2.sec,h3.sub{break-after:avoid;}th,td,thead th,tbody tr.grand td,.brand .brand-logo,.doc-meta .conf,h2.sec .num,.src,.st{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+</style></head>
+<body style="background-color:rgba(255,255,253,0.98)">
+<div class="page">
+<header class="masthead"><div class="brand"><img class="brand-logo" src="{{ logo }}" alt="South River Capital"></div><div class="doc-meta"><div class="dt">Memo Date: <span>{{ md_fmt }}</span></div></div></header>
+<div class="doc-title cover-title"><div class="kicker">South River Capital</div><h1>Deal Summary &amp; Policy Compliance</h1></div>
+<table class="kv two"><tbody>
+<tr><td class="k">Borrower</td><td>{{ name }}</td><td class="k">Guaranteed Remaining</td><td>{{ guar_basis_money }}</td></tr>
+<tr><td class="k">Team / League</td><td>{{ team }} — {{ league }}</td><td class="k">LTC</td><td>{{ ltc }}%</td></tr>
+<tr><td class="k">Loan</td><td>{{ loan_money }} at {{ rate }}% per annum</td><td class="k">Term</td><td>{{ months }}-month balloon — matures {{ mat_fmt }}</td></tr>
+<tr><td class="k">Collateral</td><td>Contract receivable (UCC-1) · personal guarantee · {% if has_ddd %}DDD policy{% else %}No Insurance{% endif %}</td><td class="k">Repayment</td><td>Balloon at maturity</td></tr>
+</tbody></table>
+<section class="section cover-sec"><h2 class="sec">Policy Compliance</h2>
+<table class="zebra compliance"><thead><tr><th>Criteria / Covenant</th><th style="width:78px">Requirement</th><th>Actual</th><th style="width:104px">Status</th></tr></thead><tbody>{{ compliance_html }}</tbody></table></section>
+<section class="section cover-sec"><h3 class="sub">Exceptions &amp; Mitigants</h3>
+<div class="callout">{{ exceptions_html }}</div></section>
+<div class="approval"><div class="sig"><div class="line"></div><div class="cap">Credit Approval — Exceptions Acknowledged</div></div><div class="sig sig-date"><div class="line"></div><div class="cap">Date</div></div></div>
+<p class="note-fine" style="margin-top:6pt;font-size:7.5pt">Thresholds per South River Capital athlete-lending guidelines; any exception requires credit approval prior to funding.</p>
+<div class="pg-footer"><span>South River Capital — Credit Memorandum</span><span>Page 1 of 7</span></div>
+</div>
+<div class="page">
+<header class="masthead"><div class="brand"><img class="brand-logo" src="{{ logo }}" alt="South River Capital"></div><div class="doc-meta"><div class="dt">Memo Date: <span>{{ md_fmt }}</span></div></div></header>
+<div class="doc-title"><div class="kicker">South River Capital</div><h1>Credit Memorandum</h1></div>
+<table class="kv two"><tbody>
+<tr><td class="k">Borrower</td><td>{{ name }}</td><td class="k">Lending Area</td><td>{{ league }}</td></tr>
+<tr><td class="k">Address (Season)</td><td>{{ addr }}</td><td class="k">Loan Type</td><td>{{ loan_type }}</td></tr>
+<tr><td class="k">Phone</td><td>{{ phone }}</td><td class="k">Date of Birth</td><td>{{ dob }}</td></tr>
+<tr><td class="k">{% if is_college %}School / Program{% else %}Team / Employer{% endif %}</td><td>{{ team }}</td><td class="k">Tax&nbsp;ID / Driver's&nbsp;Lic.</td><td>{{ ssn }} / {{ dl }}</td></tr>
+</tbody></table>
+<section class="section"><h2 class="sec"><span class="num">I</span>Purpose of Proposed Facility</h2>
+<div class="callout"><p>The Borrower is requesting a <strong>{{ loan_money }}</strong> loan as an advance against <strong>{{ guar_basis_money }}</strong> in guaranteed salary. {{ name }} is a {% if is_college %}Collegiate{% else %}Professional{% endif %} {{ sport }} player for the {{ team }}. The season salary is fully guaranteed. The facility is structured to balloon in <strong>{{ mat_fmt }}</strong>.</p></div>
+<div class="src-grid"><div class="src"><div class="lab">Primary</div><div class="ord">Repayment Source</div><p style="margin:0">Cash flow from contract earnings, swept at payroll.</p></div><div class="src"><div class="lab">Secondary</div><div class="ord">Repayment Source</div><p style="margin:0">Enforcement of the full personal guarantee provided by the Borrower.</p></div>{% if has_ddd %}<div class="src"><div class="lab">Tertiary</div><div class="ord">Repayment Source</div><p style="margin:0">DDD insurance policy (Exceptional Risk Advisors / Lloyd's of London) assigned to Lender.</p></div>{% endif %}</div></section>
+<section class="section"><h2 class="sec"><span class="num">II</span>Recommendation &amp; Action Request</h2>
+<h3 class="sub">Summary of Transaction Recommendations</h3>
+<ul class="tight"><li>Lender to provide a <strong>{{ loan_money }}</strong> loan at <strong>{{ rate }}%</strong> per annum based on the Borrower's guaranteed contract.</li><li>Borrower to establish payroll direct deposit in an account with Lender for automatic payment sweep.</li><li>Lender to file a UCC-1 financing statement against the contract receivable.</li>{% if has_ddd %}<li>Lender to be protected by a death &amp; disability insurance policy underwritten by Lloyd's of London.</li>{% endif %}</ul>
+<h3 class="sub">Action Request Details</h3>
+<ul class="tight"><li>Lender to provide a <strong>{{ months }}</strong>-month full balloon loan; all principal and interest due at maturity {{ mat_fmt }}.</li><li>Borrower to establish payroll direct deposit in an account with Lender for automatic payment sweep.</li><li>Lender to file a UCC-1 financing statement against the contract receivable.</li>{% if agent %}<li>Agent: <strong>{{ agent }}</strong></li>{% endif %}</ul></section>
+<div class="pg-footer"><span>South River Capital — Credit Memorandum</span><span>Page 2 of 7</span></div>
+</div>
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">III</span>New Facility Terms &amp; Conditions</h2>
+<table class="kv"><tbody><tr><td class="k">Borrower</td><td>{{ name }}</td></tr><tr><td class="k">Relationship</td><td>{{ loan_type }} Borrower</td></tr><tr><td class="k">Loan Type</td><td>Contract loan</td></tr><tr><td class="k">Purpose</td><td>Business purposes</td></tr><tr><td class="k">Proposed Commitment</td><td>{{ loan_money }}</td></tr><tr><td class="k">Proposed Maturity</td><td>{{ mat_fmt }}</td></tr><tr><td class="k">Amortization Schedule</td><td>Balloon</td></tr><tr><td class="k">Balloon at Maturity</td><td>Yes</td></tr><tr><td class="k">Upfront Fee</td><td>{{ fee }}% ({{ fee_amt }})</td></tr><tr><td class="k">Interest Rate</td><td>{{ rate }}%</td></tr><tr><td class="k">Prepayment Penalty</td><td>None</td></tr><tr><td class="k">Collateral</td><td>{% if is_college %}Contract receivable — UCC-1 filing{% else %}League contract receivable — UCC-1 filing{% endif %}</td></tr><tr><td class="k">Appraisals</td><td>None</td></tr><tr><td class="k">Formulas / Advances</td><td>LTC (Loan-to-Contract): {{ loan_money }} loan &divide; {{ guar_basis_money }} guaranteed earnings = <strong>{{ ltc }}%</strong></td></tr><tr><td class="k">Guarantor(s)</td><td>{{ name }}</td></tr><tr><td class="k">Subordinations</td><td>None</td></tr><tr><td class="k">Repayment</td><td>Proceeds remaining on contract · enforcement of personal guarantee{% if has_ddd %} · DDD policy assigned to Lender{% endif %}</td></tr></tbody></table></section>
+<section class="section"><h2 class="sec"><span class="num">IV</span>Risk Considerations &amp; FAQ</h2>
+{% if is_college %}
+<div class="faq"><div class="q">What if the player is suspended by the program, the conference, or the NCAA?</div><p>Generally, if a player is suspended or ruled ineligible, pay ceases until the matter is resolved. Off-the-field and eligibility issues are the key risk.</p></div>
+<div class="faq"><div class="q">Contract risk — the payor of the Borrower's compensation cannot fulfill its contractual obligations.</div><ul class="tight"><li>The Borrower's compensation is a direct contractual obligation of {{ team }}, payable under the revenue-sharing framework established by the House v. NCAA settlement (effective July 2025).</li><li>Unlike professional sports, there is no league-level backstop — no governing body is obligated to pay if the institution defaults. The framework is new and has no long-term payment history; the primary support is the institution's own credit standing.</li><li>To the extent compensation includes third-party NIL agreements, those carry counterparty risk — nonpayment disputes involving NIL collectives have occurred in the market.</li></ul></div>
+<div class="faq"><div class="q">What if the player transfers, is removed from the roster, or loses eligibility?</div><ul class="tight"><li>Revenue-share and NIL agreements typically condition payment on continued enrollment, athletic eligibility, and roster status; a transfer or roster removal can end the payment stream, and some agreements provide for repayment (buyout) on transfer.</li><li>The termination and buyout provisions of the executed agreement govern and are confirmed at underwriting.</li></ul></div>
+<div class="faq"><div class="q">What if the Borrower gets hurt?</div><ul class="tight"><li>College sports have no injured-reserve system; whether compensation continues through an injury depends on the terms of the Borrower's agreement, confirmed at underwriting.</li>{% if has_ddd %}<li>The Lender is assigned a separate disability insurance policy naming only the Lender.</li>{% endif %}</ul></div>
+{% else %}
+<div class="faq"><div class="q">What if the player is suspended by the team or the League?</div><p>Generally, if a player is suspended, pay ceases until the suspension is resolved. Off-the-field issues are the key risk.</p></div>
+<div class="faq"><div class="q">Contract risk — the Borrower's employer cannot fulfill its contractual obligations.</div><ul class="tight"><li>No professional team has ever defaulted on the payroll of a player's salary.</li><li>The respective League can step in and pay the salary should a team default.</li></ul></div>
+<div class="faq"><div class="q">What if the Borrower gets hurt?</div><ul class="tight"><li>Players continue to collect compensation under a guaranteed contract while on injured reserve.</li>{% if has_ddd %}<li>The Lender is assigned a separate disability insurance policy naming only the Lender.</li>{% endif %}</ul></div>
+{% endif %}
+<div class="faq"><div class="q">What if the player over-leverages and becomes insolvent?</div><ul class="tight"><li>The Lender holds a first right of refusal on all additional debt; failure to comply is an event of default.</li><li>Direct deposit sweep repays Lender on payroll day before any residual reaches the player.</li><li>Quarterly credit report pulls — any new leverage triggers an event of default.</li></ul></div>
+</section>
+<div class="pg-footer"><span>South River Capital — Credit Memorandum</span><span>Page 3 of 7</span></div>
+</div>
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">V</span>Project Sponsorship</h2><p class="lead">{{ sponsor_text }}</p></section>
+<section class="section"><h2 class="sec"><span class="num">VI</span>Uses of Funds</h2>
+<p>The funds are being used for off-season training and business expenses.</p>
+<table><thead><tr><th>Disbursement</th><th class="num-col">Amount</th></tr></thead><tbody>{{ uses_html }}</tbody></table>
+<p class="note-fine">Disbursement amounts are estimates sourced from the deal documents; confirm against the final settlement statement.</p></section>
+<section class="section"><h2 class="sec"><span class="num">VII</span>Contract Analysis</h2>
+{% if contract_notes %}<p>{{ contract_notes }}</p>{% endif %}
+<p>{{ name }} has a fully guaranteed season salary of <strong>{{ salary_money }}</strong> with the {{ team }}.{% if contract_remaining_money %} The total remaining value of the contract is <strong>{{ contract_remaining_money }}</strong>.{% endif %} The guaranteed season salary serves as the sole underwriting basis for this facility.</p>
+<table><thead><tr><th>Season</th><th class="num-col">Base Salary</th><th>Status</th></tr></thead><tbody>{% if contract_remaining_money %}<tr><td>Total Contract Remaining</td><td class="num-col">{{ contract_remaining_money }}</td><td>All Remaining Seasons</td></tr>{% endif %}<tr class="total"><td><strong>Underwriting Basis (Guaranteed Only)</strong></td><td class="num-col"><strong>{{ salary_money }}</strong></td><td>Fully Guaranteed</td></tr></tbody></table>
+<p class="note-fine">Figures reflect guaranteed compensation only, per South River Capital underwriting policy.</p></section>
+<div class="pg-footer"><span>South River Capital — Credit Memorandum</span><span>Page 4 of 7</span></div>
+</div>
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">VIII</span>Guarantor Analysis</h2>
+<p>The analysis below is based on the Borrower's contract with the {{ team }}. Taxes and living expenses are sourced directly from the Personal Financial Statement. After servicing all existing debt, the Borrower maintains the net cash flow shown below.</p>
+<table class="zebra"><caption>Personal Cash Flow Analysis — {{ name }}</caption><thead><tr><th style="width:34px">Note</th><th>Line Item</th><th class="num-col">Season</th></tr></thead><tbody>{{ cf_html }}</tbody></table>
+<p class="note-fine"><strong>Notes:</strong>&nbsp; 1 — Guaranteed season salary. &nbsp;2 — Other income per Annual Income section of PFS. &nbsp;3 — Estimated 45% blended tax rate applied to gross income. &nbsp;4 — Estimated 10% of gross income to cover all ordinary living expenses. &nbsp;5 — Proposed Facility shown at principal (loan amount); the interest-included total is carried as a liability on the Personal Financial Statement. Alimony/child support and all other debt line items sourced from the Annual Expenditures section of the PFS and supporting documents.</p></section>
+<section class="section"><h2 class="sec"><span class="num">IX</span>Personal Financial Statement</h2>
+<table><caption>As reported on Personal Financial Statement — {{ name }}</caption><thead><tr><th>Assets</th><th class="num-col">Actual</th></tr></thead><tbody>{{ pfs_html }}</tbody></table>
+<p><strong>Credit:</strong> {{ credit_text }}</p></section>
+<div class="pg-footer"><span>South River Capital — Credit Memorandum</span><span>Page 5 of 7</span></div>
+</div>
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">X</span>Repayment &amp; Amortization</h2>
+<p>Interest is paid monthly; the principal is repaid as a single balloon at maturity.</p>
+<table class="zebra"><thead><tr><th style="width:52px">Payment</th><th>Date</th><th class="num-col">Interest</th><th class="num-col">Principal</th><th class="num-col">Total</th></tr></thead><tbody>{{ repayment_html }}</tbody></table>
+<p class="note-fine">Repayment schedule per the deal documents. Interest at {{ rate }}% p.a. on {{ loan_money }}; principal due as a balloon at maturity via payroll sweep. UCC-1 filed against contract receivable to secure first-lien position.</p></section>
+<section class="section"><h2 class="sec"><span class="num">XI</span>Repayment Sources</h2>
+<div class="src-grid"><div class="src"><div class="lab">Primary</div><div class="ord">Source</div><p style="margin:0">{% if is_college %}Compensation under the Borrower's revenue-sharing / NIL agreements.{% else %}Professional contract salary.{% endif %}</p></div><div class="src"><div class="lab">Secondary</div><div class="ord">Source</div><p style="margin:0">Personal guarantee of the Borrower, including confession of judgment and consent to wage garnishment.</p></div>{% if has_ddd %}<div class="src"><div class="lab">Tertiary</div><div class="ord">Source</div><p style="margin:0">DDD insurance policy (Exceptional Risk Advisors / Lloyd's of London) assigned to Lender.</p></div>{% endif %}</div></section>
+<div class="pg-footer"><span>South River Capital — Credit Memorandum</span><span>Page 6 of 7</span></div>
+</div>
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">XII</span>Supporting Documentation</h2>
+<p>The following supporting documentation is available upon request.</p>
+<table class="kv"><tbody>{{ doc_list_html }}</tbody></table>
+<p class="note-fine" style="margin-top:14pt">This memorandum is prepared solely for the internal credit evaluation of South River Capital and its participation lenders. All information is derived from executed loan documents, third-party credit reports, and borrower-provided financial statements on file. This document is <strong>confidential</strong> and intended only for authorized recipients.</p></section>
+<div class="pg-footer"><span>South River Capital — Credit Memorandum</span><span>Page 7 of 7</span></div>
+</div>
+</body></html>

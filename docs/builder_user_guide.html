@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Builder User Guide — South River Capital</title>
+<style>
+:root{--navy:#0f2a43;--navy-2:#1c3d5a;--gold:#b9952b;--ink:#1a1a1a;--ink-soft:#444;--rule:#cdd3da;--rule-strong:#9aa6b2;--paper:#fff;--desk:#e9e7e0;--zebra:#f4f6f8;}
+*{box-sizing:border-box;}html,body{margin:0;padding:0;}
+body{background:var(--desk);font-family:"Times New Roman",Times,serif;font-size:10pt;line-height:1.42;color:var(--ink);-webkit-font-smoothing:antialiased;padding:32px 16px 64px;}
+.page{width:8.5in;min-height:11in;background:var(--paper);margin:0 auto 28px;padding:.7in .75in .85in;box-shadow:0 2px 14px rgba(0,0,0,.12);border-radius:2px;position:relative;}
+p{margin:0 0 7pt;text-wrap:pretty;}.lead{margin-bottom:9pt;}strong{font-weight:bold;}
+.section{margin-top:16pt;}.section:first-of-type{margin-top:0;}
+h2.sec{font-size:11.5pt;font-weight:bold;color:#000;text-transform:uppercase;letter-spacing:.04em;margin:0 0 8pt;padding-bottom:4pt;border-bottom:1.5pt solid var(--navy);display:flex;align-items:baseline;gap:8pt;}
+h2.sec .num{font-family:Arial,Helvetica,sans-serif;font-size:8pt;font-weight:bold;color:#fff;background:var(--navy);padding:2pt 5pt;letter-spacing:.05em;transform:translateY(-1pt);}
+h3.sub{font-size:10pt;font-weight:bold;color:#000;margin:11pt 0 4pt;text-transform:uppercase;letter-spacing:.03em;}
+.masthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--navy);padding-bottom:10pt;margin-bottom:4pt;}
+.brand{display:flex;align-items:center;gap:11px;}.brand .brand-logo{height:50px;width:auto;display:block;background:#fff;padding:5px 8px;border-radius:4px;}
+.doc-meta{text-align:right;font-family:Arial,Helvetica,sans-serif;}
+.doc-meta .conf{font-size:7pt;font-weight:bold;letter-spacing:.18em;color:#fff;background:var(--gold);padding:2pt 6pt;display:inline-block;text-transform:uppercase;}
+.doc-meta .dt{font-size:8pt;color:var(--ink-soft);margin-top:6pt;}.doc-meta .dt span{color:var(--ink);font-weight:bold;}
+.doc-title{text-align:center;margin:14pt 0 16pt;}.doc-title .kicker{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;letter-spacing:.4em;color:var(--gold);text-transform:uppercase;font-weight:bold;}
+.doc-title h1{font-size:21pt;font-weight:bold;color:#000;letter-spacing:.04em;margin:5pt 0 0;text-transform:uppercase;}
+table{width:100%;border-collapse:collapse;margin:4pt 0 6pt;font-size:9.5pt;}
+caption{caption-side:top;text-align:left;font-weight:bold;color:#000;padding-bottom:3pt;font-size:9.5pt;}
+th,td{border:.75pt solid var(--rule);padding:3.5pt 7pt;vertical-align:top;text-align:left;}
+thead th{background:var(--navy);color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;font-weight:bold;letter-spacing:.05em;text-transform:uppercase;border-color:var(--navy-2);}
+table.kv td.k{width:30%;background:#f1f4f7;font-weight:bold;color:#000;}
+.src-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9pt;margin-top:8pt;}
+.src{border:.75pt solid var(--rule);border-top:2.5pt solid var(--navy);padding:7pt 9pt;background:#fafbfc;}
+.src .lab{font-family:Arial,Helvetica,sans-serif;font-size:7pt;letter-spacing:.12em;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:4pt;}
+.src .ord{font-size:8pt;color:#000;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2pt;}
+.callout{border-left:3pt solid #000;background:#fcfbf6;padding:9pt 12pt;margin:6pt 0 8pt;}
+ul.tight{margin:3pt 0 7pt;padding-left:18pt;}ul.tight li{margin-bottom:3pt;}
+ol.tight{margin:3pt 0 7pt;padding-left:20pt;}ol.tight li{margin-bottom:3.5pt;}
+.note-fine{font-size:8.5pt;color:var(--ink-soft);}
+.pg-footer{position:absolute;left:.75in;right:.75in;bottom:.42in;display:flex;justify-content:space-between;align-items:center;font-family:Arial,Helvetica,sans-serif;font-size:6.8pt;letter-spacing:.1em;color:#8a8a8a;text-transform:uppercase;border-top:.75pt solid var(--rule);padding-top:5pt;}
+@page{size:letter;margin:.7in .75in .6in;}
+@media print{body{background:none;padding:0;}.page{width:auto;min-height:0;margin:0;padding:0;box-shadow:none;border-radius:0;break-after:page;}.page:last-child{break-after:auto;}.pg-footer{display:none;}.section,.src,.callout,tr,thead{break-inside:avoid;}h2.sec,h3.sub{break-after:avoid;}th,td,thead th,.brand .brand-logo,.doc-meta .conf,h2.sec .num,.src{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+</style></head>
+<body style="background-color:rgba(255,255,253,0.98)">
+
+<!-- ============================== PAGE 1 ============================== -->
+<div class="page">
+<header class="masthead"><div class="brand"><img class="brand-logo" src="__LOGO__" alt="South River Capital"></div><div class="doc-meta"><div class="conf">Internal Use</div><div class="dt">Guide Date: <span>August 5, 2026</span></div></div></header>
+<div class="doc-title"><div class="kicker">South River Capital</div><h1>Builder User Guide</h1><div class="kicker" style="margin-top:6pt;letter-spacing:.24em">Credit Memo &middot; Participation Agreement &middot; Loan Documents &middot; Closing Binder</div></div>
+
+<div>
+<p class="lead">This guide walks through the four South River Capital builders, from the first deal documents to the final indexed closing binder. The app runs in your web browser on your own computer; documents are read by Claude only when you click a button that says so.</p>
+
+<h3 class="sub">The four builders at a glance</h3>
+<div class="src-grid" style="grid-template-columns:repeat(2,1fr);">
+<div class="src"><div class="lab">1 &middot; Underwrite</div><div class="ord">Credit Memo Builder</div><p style="margin:0">Reads the deal documents and drafts the internal credit memorandum (PDF / Word).</p></div>
+<div class="src"><div class="lab">2 &middot; Syndicate</div><div class="ord">Participation Agreement Builder</div><p style="margin:0">Fills the Brookridge or standard-form participation agreement for each participant (Word / PDF).</p></div>
+<div class="src"><div class="lab">3 &middot; Close</div><div class="ord">Loan Documents Builder</div><p style="margin:0">Generates the closing package &mdash; Affidavit, Note, Loan &amp; Security Agreement, Guaranty, Memo of Settlement, UCC-1, Payment Direction Letter.</p></div>
+<div class="src"><div class="lab">4 &middot; Bind</div><div class="ord">Closing Binder Builder</div><p style="margin:0">Merges the signed PDFs into one binder with a cover, clickable Table of Contents and title pages.</p></div>
+</div>
+<p style="margin-top:7pt">Work left to right on a deal. Each tab has a <strong>Pull deal info</strong> button that carries the deal terms forward, so nothing is typed twice: <strong>Credit Memo &rarr; Participation Agreement &rarr; Loan Documents &rarr; (collect signatures) &rarr; Closing Binder</strong>. If you are coming back on a later day, upload the saved memo or loan documents instead of pulling &mdash; every tab has a reader button for that.</p>
+</div>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 1 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 2 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">I</span>Getting Started</h2>
+
+<h3 class="sub">Opening the app</h3>
+<ol class="tight">
+<li>Open Chrome or Edge and go to <strong>http://localhost:5173</strong>. The Builder normally starts by itself when you sign in to Windows, so the page is usually just there.</li>
+<li>If the page will not load, open the <strong>credit-memo-builder</strong> folder (C:\Users\Lauren&nbsp;Utterback\credit-memo-builder) and double-click <strong>Start&nbsp;Builder.bat</strong>. Two minimized windows open (&ldquo;SRC Backend&rdquo; and &ldquo;SRC Frontend&rdquo;) and the app opens in your browser after a few seconds. Leave those two windows running while you work.</li>
+<li>The four builders are the tabs across the top of the page: <strong>Credit Memo</strong>, <strong>Participation Agreement</strong>, <strong>Loan Documents</strong>, <strong>Closing Binder</strong>.</li>
+</ol>
+
+<h3 class="sub">Before you start</h3>
+<div class="callout">
+<ul class="tight" style="margin-bottom:0">
+<li>Buttons that mention Claude (&ldquo;Extract with Claude&rdquo;, &ldquo;Read credit memo&rdquo;, &ldquo;Sort &amp; organize with Claude&rdquo;) read the files you upload and fill in fields. They only fill fields that are still <em>empty</em> &mdash; anything you typed is never overwritten. (Two deliberate exceptions are flagged in Sections III and IV.)</li>
+<li>The <strong>Credit Memo</strong> and <strong>Loan Documents</strong> tabs remember your entries when you switch tabs. The <strong>Participation Agreement</strong> and <strong>Closing Binder</strong> tabs start fresh each time you leave them &mdash; finish and download before switching away. Refreshing the browser clears every tab.</li>
+<li>Downloaded files land in your browser&rsquo;s <strong>Downloads</strong> folder.</li>
+<li>A grayed-out Generate button means a required field is still blank &mdash; the list per builder is in Section VI.</li>
+</ul></div>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 2 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 2 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">II</span>Credit Memo Builder</h2>
+<p class="lead">Drafts the internal credit memorandum for an athlete loan from the raw deal documents.</p>
+
+<h3 class="sub">Step 1 &mdash; Upload deal documents</h3>
+<ol class="tight">
+<li>On the <strong>Credit Memo</strong> tab, click <strong>Choose Files</strong> and select the deal documents: the player&rsquo;s contract, personal financial statement, credit report, and term sheet. You can select several at once or add more afterwards &mdash; the list accumulates (click <strong>&#10005;</strong> to remove one).</li>
+<li>Click <strong>Extract with Claude</strong> and wait for the green &ldquo;&#10003; Extracted &mdash; confirm deal terms and generate&rdquo; message (usually under a minute).</li>
+</ol>
+
+<h3 class="sub">Step 2 &mdash; Confirm deal terms</h3>
+<ol class="tight">
+<li>Check every field: Borrower name, Team, League, Sport, Guaranteed salary, Loan amount, Loan type, Rate, Origination fee, Funding date, Maturity date, Tax ID (last 4), and Agent.</li>
+<li>Fix anything that looks wrong by typing over it &mdash; the memo prints exactly what these fields say. The extraction only fills fields that were blank.</li>
+<li><strong>Guaranteed salary</strong> is the season&rsquo;s guaranteed compensation only: base salary plus any bonus installment guaranteed for that specific season. Never include non-guaranteed incentives or endorsements. The extraction settles it from every document you uploaded &mdash; including any separate guarantee addendum or rider, which can make only part of the season salary guaranteed.</li>
+<li>Under the field the app shows a <strong>Spotrac cross-check</strong> against the season&rsquo;s <strong>cap hit</strong> on spotrac.com (base salary <em>plus</em> prorated signing bonus and other counted bonuses &mdash; never the base salary alone): a green &#10003; when your figure matches it, an amber &#9888; when they differ, and a short note giving the cap hit&rsquo;s composition and how much of the season Spotrac marks as guaranteed (with a <strong>view&nbsp;&#8599;</strong> link to the player&rsquo;s page). An amber flag is normal when you underwrite on the guaranteed portion of a partially guaranteed contract &mdash; read the note, check the executed contract, and remember the documents govern; click <strong>Use Spotrac figure</strong> only if you decide Spotrac is right. If the documents contained no salary at all, the field is filled from Spotrac and the message says so &mdash; always verify it against the executed contract. The check updates live as you edit the field.</li>
+</ol>
+
+<h3 class="sub">Step 2b &mdash; Debt roll-forward</h3>
+<p>This step appears as soon as your documents have been read &mdash; including when the personal financial statement carried no detail schedules (Schedules D, F and G, the pages that list each debt by lender), because you can enter those debts by hand. It is where you tell the app what to do with each financed debt: carry it forward to today, hold it exactly as reported, or show it repaid.</p>
+<ol class="tight">
+<li>Start with the <strong>PFS statement date</strong> at the top &mdash; every figure below is measured from it. If it read wrong, correct it and the table recalculates.</li>
+<li>The line beside it tells you whether anything moved: either &ldquo;Rolled forward <em>N</em> months to &lt;date&gt; &mdash; $X of principal reduction&rdquo;, or a note that balances are being used exactly as reported (the statement is current, undated, or nothing on it is paid monthly).</li>
+<li>The table lists one row per financed debt: the lender, the <strong>Rolls into</strong> summary liability, the <strong>Reported</strong> balance from the PFS, an editable <strong>Payment</strong> and <strong>Maturity</strong>, a <strong>Treatment</strong>, and the resulting <strong>Adjusted</strong> balance.</li>
+<li><strong>Read down the Payment column and check each amount sits beside the right lender.</strong> A scanned PFS often reaches Claude with its table columns scrambled, so a payment can land one row off &mdash; which quietly puts the wrong paydown on the wrong debt and changes Total Liabilities and Net Worth. That is exactly why the payment and maturity cells are editable: fix anything that looks misplaced against the PFS before you generate.</li>
+</ol>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 3 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 4 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">II</span>Credit Memo Builder <span style="font-weight:normal;text-transform:none;letter-spacing:0">(continued)</span></h2>
+<h3 class="sub">Step 2b &mdash; Debt roll-forward <span style="font-weight:normal;text-transform:none;letter-spacing:0">(continued)</span></h3>
+<ol class="tight" start="5">
+<li>Set <strong>Treatment</strong> per debt: <strong>Roll forward</strong> reduces the balance by the payment for every month since the statement date; <strong>Hold as reported</strong> carries it exactly as the PFS shows it; <strong>Zero out (repaid)</strong> shows it repaid in full and carried at $0 &mdash; use that for a debt being paid off at closing. Rows the app will not roll show the reason in place of a number &mdash; &ldquo;no scheduled payment (revolving)&rdquo;, &ldquo;contract-based note, not on a monthly schedule&rdquo;, &ldquo;held at the reported balance&rdquo;.</li>
+<li><strong>+ Add debt</strong> enters a debt the statement or the extraction missed; <strong>&#10005;</strong> removes a row. Fill in the lender, balance, payment and maturity &mdash; and set <strong>Rolls into</strong> to the summary liability the debt belongs under (Mortgage Debt, Notes Payable to: others, or Notes Payable: Contract Based). A debt with none set moves no total, and the memo prints it under an explicit note saying it is not carried in the totals.</li>
+<li>Read any &#9888; warnings &mdash; each names the debt it concerns (most often a maturity date that could not be read, so that debt was not stopped at maturity).</li>
+<li>The sentence printed below the table is word-for-word what gets added to the memo&rsquo;s <strong>Credit</strong> paragraph explaining the adjustment.</li>
+<li><strong>Every debt in this table is printed on the memo</strong>, in Section&nbsp;IX beneath the liability it rolls into &mdash; including the ones carried exactly as reported, which change no figure. Each line shows the balance the memo carries, with the schedule, the reported balance and the reason for the difference in small type under the lender.</li>
+</ol>
+
+<div class="callout"><p style="margin-bottom:4pt"><strong>Step 2b &mdash; the rule behind it</strong></p>
+<p style="margin-bottom:0">When the PFS is more than a month old, each financed debt is carried forward as <em>reported balance less (monthly payment &times; months since the statement date)</em>, never below $0 and never past the debt&rsquo;s maturity. Credit cards and other revolving lines are left as reported because they have no set monthly paydown, and so are contract-based notes on Schedule G, which are repaid out of game checks rather than monthly. The adjusted figures are what the memo&rsquo;s PFS table, Total Liabilities and Net Worth are built on. The debts listed under each liability in Section&nbsp;IX are a <em>breakdown</em> of that line, never additions to it, so listing one never changes a total &mdash; which means a debt the PFS summary genuinely omits is shown on the memo but not counted in Total Liabilities. Payments include interest &mdash; and mortgage payments on this form include taxes and insurance &mdash; so the method deliberately understates how much was actually paid down.</p>
+</div>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 4 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 5 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">II</span>Credit Memo Builder <span style="font-weight:normal;text-transform:none;letter-spacing:0">(continued)</span></h2>
+
+
+
+<h3 class="sub">Step 3 &mdash; Generate memo</h3>
+<ol class="tight">
+<li>Click <strong>Generate credit memo</strong> (it needs at least the Loan amount and Guaranteed salary). The finished memo appears in the preview below.</li>
+<li>Page&nbsp;1 is the <strong>Deal Summary &amp; Policy Compliance</strong> coversheet, filled out automatically from the same figures as the memo body: each policy test is marked Pass / Exc. / N/A (LTC &le;&nbsp;30%, positive net cash flow, and the standard closing conditions), and every exception is listed under <em>Exceptions &amp; Mitigants</em> above the credit-approval signature line.</li>
+<li>Skim the preview &mdash; in particular the coversheet&rsquo;s exception list, Section V, the athlete write-up the app researches automatically from public sources, and Section VI Uses of Funds.</li>
+<li>Download with <strong>&#128213; PDF</strong> or <strong>&#128196; Word</strong>. If you change a field, click <strong>Generate credit memo</strong> again to refresh the preview before downloading.</li>
+</ol>
+
+<div class="callout"><p style="margin-bottom:4pt"><strong>Good to know</strong></p>
+<ul class="tight" style="margin-bottom:0">
+<li>The house underwriting rules are applied automatically and cannot be typed over: taxes are always 45% of gross income, ordinary living expenses 10%, net worth and the facility-with-interest figures are always computed &mdash; never copied from the documents.</li>
+<li>Anything you change in Step&nbsp;2b is picked up the next time you click <strong>Generate credit memo</strong> &mdash; the review table and the memo can never disagree.</li>
+<li>Leave the fields filled in when you move on &mdash; the Participation Agreement and Loan Documents tabs pull their deal info from this tab.</li>
+</ul></div>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 5 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 3 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">III</span>Participation Agreement Builder</h2>
+<p class="lead">Fills the participation agreement for one participant at a time and produces Word and PDF (the agreement plus Exhibit&nbsp;A Key Terms and Exhibit&nbsp;B Participation Certificate). The Lender is always South River Capital LLC.</p>
+
+<h3 class="sub">Step 1 &mdash; Choose the agreement &amp; load the breakdown</h3>
+<ol class="tight">
+<li>Pick the <strong>Agreement type</strong>: <em>Brookridge Participation Agreement</em> (participant and signatory come prefilled) or <em>Participation Agreement (standard form)</em>.</li>
+<li>Bring in the deal terms one of two ways:
+<ul class="tight" style="margin-top:3pt">
+<li>If you built the memo in this browser session, click <strong>&#11015; Pull deal info from the Credit Memo tab</strong> &mdash; borrower, loan amount, interest rate and origination fee come over.</li>
+<li>Otherwise upload the saved credit memo (PDF works best) under &ldquo;Credit Memo&rdquo; and click <strong>Read credit memo</strong>. Only empty fields are filled.</li>
+</ul></li>
+<li>Upload the deal&rsquo;s <strong>Participant Breakdown</strong> workbook (.xlsx) and click <strong>Load breakdown</strong>.</li>
+<li>Pick the participant from the <strong>Participant (from breakdown)</strong> dropdown &mdash; it preselects the first one, so switch it to the participant you need. The Participation&nbsp;%, amounts, origination fee, interest rate, late-fee share and email fill in exactly as the sheet shows them, and the printed participant / signatory names resolve automatically (Brookridge always signs via its standing signatory). <em>Picking a participant intentionally overwrites the participation fields.</em></li>
+</ol>
+
+<h3 class="sub">Step 2 &mdash; Confirm the terms</h3>
+<ol class="tight">
+<li><strong>Deal:</strong> Borrower, Loan number, Agreement date (defaults to today), <strong>Loan &amp; Security Agreement date</strong> (type this one &mdash; it is not in the memo or the breakdown), Total loan amount, Interest rate.</li>
+<li><strong>Participation &mdash; Key Terms (Exhibit A):</strong> the fields differ by form &mdash; Brookridge shows Participant&rsquo;s loan amount and Origination fee $; the standard form shows Purchase price and Application &amp; administration fees. If you typed the amounts by hand, click <strong>&#8635; Recalculate</strong> to recompute the % and fee $ from them.</li>
+<li><strong>Participant &amp; signatory:</strong> name, signatory, title, address, email.</li>
+</ol>
+<p>Everything in Step 2 prints <em>exactly as typed</em> &mdash; review carefully before generating.</p>
+
+<h3 class="sub">Step 3 &mdash; Generate the agreement</h3>
+<ol class="tight">
+<li>Click <strong>Generate &amp; preview</strong>, check the agreement, then download with <strong>&#128196; Word (.docx)</strong> and/or <strong>&#128213; PDF</strong>.</li>
+<li>Doing several participants on one deal? Just pick the next participant from the dropdown and generate again &mdash; the deal fields stay put.</li>
+</ol>
+
+<h3 class="sub">Step 4 &mdash; Send out for signature</h3>
+<ol class="tight">
+<li>The signer boxes fill themselves: the South River signer comes preloaded; the participant signer and email carry over from Step&nbsp;2 (the breakdown supplies the email).</li>
+<li>Click <strong>&#10002; Send for signature</strong> &mdash; both signers get a Demand Signatures email with the signature fields already placed. If that button isn&rsquo;t showing, the Demand Signatures API key isn&rsquo;t connected yet: use <strong>&#128203; Copy signer list</strong> and <strong>&#10002; Open Demand Signatures</strong> to send it manually instead.</li>
+</ol>
+
+<div class="callout"><p style="margin-bottom:4pt"><strong>Good to know</strong></p>
+<ul class="tight" style="margin-bottom:0">
+<li>This tab starts fresh if you switch to another tab &mdash; download your documents before leaving it.</li>
+<li>If the PDF download ever fails, the Word download still works; see Section VI.</li>
+</ul></div>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 6 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 4 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">IV</span>Loan Documents Builder</h2>
+<p class="lead">Generates the closing package in the credit memo&rsquo;s design: Business Entity Affidavit, Promissory Note (with the Exhibit&nbsp;A repayment schedule), Loan and Security Agreement (with the Exhibit&nbsp;A definitions), Guaranty, Memo of Settlement, UCC-1 Financing Statement, and the Payment Direction Letter to the team.</p>
+
+<h3 class="sub">Step 1 &mdash; Deal information</h3>
+<ol class="tight">
+<li>Click <strong>&#11015; Pull deal info from Credit Memo</strong> (same browser session), or upload the saved memo and click <strong>Read credit memo</strong> (fills empty fields only). The pull also splits the memo&rsquo;s one-line address into the UCC-1&rsquo;s street / city / state / ZIP cells, seeds the settlement deductions from the memo&rsquo;s Uses of Funds, and carries any repayment rows into the Note&rsquo;s Exhibit&nbsp;A.</li>
+<li>Review the borrower block: name, surname, occupation, address cells, state spelled out, loan number, loan amount, interest rate. The name is the full legal name the passport or licence shows; <strong>Surname only (UCC-1)</strong> is that ID&rsquo;s surname field on its own &mdash; it fills the financing statement&rsquo;s LAST NAME box, which has to carry a two-word surname whole (&ldquo;Rivas Delgado&rdquo;, never &ldquo;Delgado&rdquo;). Leave it blank and the last word of the name is used; a Jr./III always prints in the suffix box.</li>
+<li><strong>Repayment structure:</strong> Balloon, Interest Only, or Fully Amortized &mdash; this sets the Note&rsquo;s payment wording and how Exhibit&nbsp;A is computed. (Uploading the amortization workbook in Step&nbsp;2 sets it automatically.)</li>
+<li><strong>Insurance Policy:</strong> Yes, or &ldquo;No &mdash; requirement waived&rdquo; &mdash; switches the insurance wording in the Loan and Security Agreement.</li>
+<li>Fill in the origination fee, use of proceeds, closing date and maturity date, then check the <strong>Note terms</strong>: prepayment minimum (in words, e.g. &ldquo;two&rdquo;), late charge %, exit fee %, and default rate points.</li>
+<li><strong>Team &amp; contract:</strong> upload the player&rsquo;s contract and click <strong>Extract team &amp; contract with Claude</strong> &mdash; it fills the team name and mailing address, league, contract title and contract date. <em>These extracted values intentionally replace what is in those fields</em> (the upload is specifically for them). The team address is taken only when it actually appears in the documents &mdash; the Payment Direction Letter is mailed there.</li>
+<li>No team yet? Tick <strong>&ldquo;Athlete does not have a contract with a Team / Employer&rdquo;</strong> and set the League and the Upcoming season year &mdash; the documents switch to &ldquo;the team that signs the Borrower in the upcoming season&rdquo; language and the cover page shows &ldquo;None&rdquo; for Team and Contract.</li>
+<li><strong>Payment direction &mdash; receiving account:</strong> South River&rsquo;s receiving-account details are prefilled from the server&rsquo;s settings. Only edit these if a deal uses a different account.</li>
+</ol>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 7 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 5 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">IV</span>Loan Documents Builder <span style="font-weight:normal;text-transform:none;letter-spacing:0">(continued)</span></h2>
+
+<h3 class="sub">Step 2 &mdash; Memo of Settlement &amp; documents</h3>
+<ol class="tight">
+<li>Upload the deal&rsquo;s amortization workbook (the &ldquo;Balloon&rdquo; or &ldquo;Fully Amortized&rdquo; .xlsx). In one go: the fee lines fill the <strong>Settlement deductions</strong>, the workbook&rsquo;s Sheet1 repayment table becomes the Note&rsquo;s <strong>Exhibit&nbsp;A &mdash; Loan Repayments by Month</strong>, and the Repayment structure dropdown is set from the workbook.</li>
+<li>Read the status line: it confirms how many lines and payments were read and cross-checks the totals against the sheet&rsquo;s own figures. A &#9888; warning means the workbook&rsquo;s stated total doesn&rsquo;t match its own lines &mdash; check the workbook before continuing.</li>
+<li>Adjust the <strong>Settlement deductions</strong> if needed: edit labels and amounts, <strong>+ Add line</strong> for a new one, <strong>&#10005;</strong> to remove. Amounts are entered as positive numbers; the printed memo shows them in parentheses. &ldquo;To be disbursed to Borrower (Est)&rdquo; is always recomputed live at the bottom.</li>
+<li><strong>After disbursement:</strong> list any amounts carved out after the disbursement figure (for example a DDD insurance premium). When any are listed, the Memo of Settlement closes with a computed &ldquo;Net to be disbursed to Borrower (Est)&rdquo; line.</li>
+<li>Under <strong>Documents to include</strong>, untick anything the package should leave out. Each document also gets its own title sheet, and the Note&rsquo;s schedule gets a &ldquo;Repayment Schedule&rdquo; cover.</li>
+</ol>
+
+<h3 class="sub">Step 3 &mdash; Generate loan documents</h3>
+<ol class="tight">
+<li>Click <strong>Generate loan documents</strong> (only the Borrower name is strictly required) and review the whole package in the preview &mdash; cover page, every document, every exhibit.</li>
+<li>Download with <strong>&#128213; PDF</strong> or <strong>&#128196; Word</strong>. After any edit, click Generate again before downloading.</li>
+</ol>
+
+<div class="callout"><p style="margin-bottom:4pt"><strong>Good to know</strong></p>
+<ul class="tight" style="margin-bottom:0">
+<li>A schedule read from the workbook outranks one pulled from the memo; the &ldquo;&#10005; clear&rdquo; link next to the schedule note falls back to a schedule computed from the deal terms.</li>
+<li>This tab&rsquo;s fields survive tab switches &mdash; the Closing Binder&rsquo;s pull button reads them, so fill this tab before building the binder.</li>
+<li>Signature and notary blocks are kept together on a page automatically in the PDF.</li>
+</ul></div>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 8 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 6 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">V</span>Closing Binder Builder</h2>
+<p class="lead">For after signing: merges the executed PDFs (scans are fine) into one closing binder with a cover page, a clickable Table of Contents, a title page per section, and PDF bookmarks. The signed pages themselves pass through untouched.</p>
+
+<h3 class="sub">Step 1 &mdash; Binder information</h3>
+<ol class="tight">
+<li>Click <strong>&#8617; Pull deal info from Loan Documents</strong> (works when the Loan Documents tab is filled in this session), or upload the loan documents / credit memo and click <strong>Read deal documents</strong> (fills empty fields only).</li>
+<li>Confirm the four cover fields: Borrower name, Loan amount, Loan number, Closing date &mdash; they print on the binder&rsquo;s cover page.</li>
+</ol>
+
+<h3 class="sub">Step 2 &mdash; Add the executed documents (PDF)</h3>
+<ol class="tight">
+<li>Upload the signed closing package and the insurance documents. <strong>PDFs only</strong> &mdash; anything else is skipped with a notice (export or scan to PDF first).</li>
+<li>Click <strong>&#10024; Sort &amp; organize with Claude</strong>. The pages are split into the standard binder sections in the standard order: the Guaranty is filed under the Loan and Security Agreement, insurance documents always come last, and the package&rsquo;s own cover sheets are dropped (the binder adds its own). The status line reports any pages that could not be placed &mdash; nothing disappears silently.</li>
+<li>Review the section list: edit any title (it becomes the Table of Contents row and the section&rsquo;s title page), reorder with <strong>&#8593;</strong>/<strong>&#8595;</strong>, remove with <strong>&#10005;</strong>. Each row shows which file and pages it came from.</li>
+<li>Prefer to do it by hand? Skip the sort &mdash; upload one PDF per section and arrange the rows yourself.</li>
+<li>Leave <strong>&ldquo;Add a title page in front of each document&rdquo;</strong> checked to match the standard binder format.</li>
+</ol>
+
+<h3 class="sub">Step 3 &mdash; Generate binder</h3>
+<ol class="tight">
+<li>Click <strong>Generate closing binder</strong> &mdash; assembling a large scan set can take a moment.</li>
+<li>Check the preview, then click <strong>&#128213; Download PDF</strong>. The file is named <strong>Closing_Binder_&lt;Borrower&gt;.pdf</strong>.</li>
+<li>In the finished PDF, every Table of Contents row is a working link that jumps to its section, and the bookmarks panel mirrors the sections.</li>
+</ol>
+
+<div class="callout"><p style="margin-bottom:4pt"><strong>Good to know</strong></p>
+<ul class="tight" style="margin-bottom:0">
+<li>This tab starts fresh if you switch away &mdash; upload, generate and download in one sitting.</li>
+<li>The browser&rsquo;s built-in preview is fine for checking page order; open the downloaded file in Adobe to double-check the clickable Table of Contents.</li>
+</ul></div>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 9 of 10</span></div>
+</div>
+
+<!-- ============================== PAGE 7 ============================== -->
+<div class="page">
+<section class="section"><h2 class="sec"><span class="num">VI</span>Troubleshooting &amp; Quick Reference</h2>
+<table class="kv"><tbody>
+<tr><td class="k">The page will not load at all</td><td>Double-click <strong>Start Builder.bat</strong> in the credit-memo-builder folder and wait a few seconds. Always use <strong>http://localhost:5173</strong> (typing 127.0.0.1 can refuse to connect). Keep the two minimized SRC windows open while you work.</td></tr>
+<tr><td class="k">A red error on extract or PDF (&ldquo;Failed to fetch&rdquo;, &ldquo;PDF rendering failed&hellip;&rdquo;)</td><td>The behind-the-scenes server needs a fresh start &mdash; this can happen when the computer has been on for many days. <strong>Restart the computer</strong>, sign back in, and reopen http://localhost:5173; the Builder starts itself again. If the error text suggests &ldquo;installing the browser&rdquo;, ignore that advice &mdash; the restart is the actual fix.</td></tr>
+<tr><td class="k">A Generate button is grayed out</td><td>A required field is blank. Credit Memo: Loan amount and Guaranteed salary. Participation Agreement: Borrower, Total loan amount, Participation&nbsp;%. Loan Documents: Borrower name. Closing Binder: at least one PDF added.</td></tr>
+<tr><td class="k">Participation Agreement PDF fails, Word works</td><td>The PDF for that tab is made by a separate converter on this computer. Use the Word file, or restart the computer and try the PDF again.</td></tr>
+<tr><td class="k">A field filled in with the wrong value</td><td>Type over it. The read/extract buttons never overwrite what you typed &mdash; except the Participation Agreement&rsquo;s participant pick and the Loan Documents&rsquo; team-&amp;-contract extraction, which are meant to replace those fields.</td></tr>
+<tr><td class="k">My typing disappeared when I switched tabs</td><td>The Participation Agreement and Closing Binder tabs reset when you leave them (the Credit Memo and Loan Documents tabs do not). Generate and download before switching. A browser refresh clears every tab.</td></tr>
+<tr><td class="k">The documents show a shorter name than the passport</td><td>Borrower name is the <strong>full legal name the passport or driver&rsquo;s license shows</strong> &mdash; every surname and any suffix &mdash; even where the contract, the PFS or the credit report shortens it. Type the full name over the field (and on the Loan Documents tab set <strong>Surname only (UCC-1)</strong> to the ID&rsquo;s surname); upload the ID with the deal documents and the extraction reads it for you.</td></tr>
+<tr><td class="k">Where did my download go?</td><td>Your browser&rsquo;s <strong>Downloads</strong> folder. The preview inside the app is the same document &mdash; what you see is what downloads.</td></tr>
+</tbody></table>
+
+<p class="note-fine" style="margin-top:14pt">This guide reflects the builders as of August&nbsp;5,&nbsp;2026. The app runs entirely on this computer at http://localhost:5173; uploaded documents are sent to Claude for reading only when a button says so. For technical details and the underwriting rules encoded in the app, see the project&rsquo;s CLAUDE.md and README in the credit-memo-builder folder. This document is <strong>internal</strong> and intended for South River Capital personnel.</p>
+</section>
+<div class="pg-footer"><span>South River Capital &mdash; Builder User Guide</span><span>Page 10 of 10</span></div>
+</div>
+
+</body></html>
