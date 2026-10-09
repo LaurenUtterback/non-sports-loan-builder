@@ -8,7 +8,7 @@ const props = defineProps({
   memoTerms: { type: Object, default: () => ({}) },
   // App-owned record of the memo terms this tab carried over ({field: value}),
   // so the memo tab can tell a carried convenience prefill from a figure the
-  // underwriter set — its Spotrac-primary qualifying_income supersedes an untouched
+  // underwriter set — the memo tab's own extraction supersedes an untouched
   // carried value, never an edited one.
   carriedTerms: { type: Object, default: null },
   memoExtraction: { type: Object, default: null },
@@ -47,10 +47,6 @@ const extractNotes = ref('')
 const memoPush = ref('')
 // Maturity as presented in the documents — carried to the memo's terms grid.
 const presentedMaturity = ref('')
-// Spotrac cross-check returned by the extraction: the qualifying_income check (memo-tab
-// machinery) plus the employer and pattern as Spotrac lists them. Verification
-// only — the documents stay authoritative.
-const spotrac = ref(null)
 
 const cadences = ref([])
 const cadence = reactive({})          // the editable cadence for this deal
@@ -114,78 +110,6 @@ function money(n, dp = 0) {
 
 function pct(n) {
   return n === null || n === undefined ? '—' : `${n.toFixed(2)}x`
-}
-
-// --- Spotrac cross-check ------------------------------------------------------
-// The backend compared Spotrac against the DOCUMENTS' figures; here each verdict
-// is recomputed against whatever is in the field right now, so the lines stay
-// truthful while the user edits (mirrors App.vue's salaryVerify — tolerance
-// 0.1%, min $1).
-const VERDICT_CLASS = {
-  match: 'ok', mismatch: 'warn', spotrac_only: 'warn',
-  docs_only: 'muted', unavailable: 'muted',
-}
-
-const salaryVerify = computed(() => {
-  if (inputs.no_contracted_income) return null
-  const c = spotrac.value?.check
-  if (!c) return null
-  const cur = Number(inputs.qualifying_income) || 0
-  const spo = Number(c.spotrac_salary) || 0
-  let verdict
-  if (spo && cur) {
-    const tol = Math.max(Math.max(spo, cur) * 0.001, 1)
-    verdict = Math.abs(spo - cur) <= tol ? 'match' : 'mismatch'
-  } else if (spo) {
-    verdict = 'spotrac_only'
-  } else {
-    verdict = c.verdict === 'unavailable' && !cur ? 'unavailable' : 'docs_only'
-  }
-  return { ...c, verdict }
-})
-
-const salaryVerifyMsg = computed(() => {
-  const v = salaryVerify.value
-  if (!v) return ''
-  const tag = v.season ? `Spotrac (${v.season} season)` : 'Spotrac'
-  switch (v.verdict) {
-    case 'match': return `✓ Matches ${tag} cap hit: ${money(v.spotrac_salary)}`
-    case 'mismatch': return `⚠ ${tag} cap hit is ${money(v.spotrac_salary)} — verify against the executed contract.`
-    case 'spotrac_only': return `⚠ ${tag} cap hit is ${money(v.spotrac_salary)} — the documents produced no figure.`
-    case 'docs_only': return `${tag}: no usable figure — documents only.`
-    default: return 'Spotrac check could not be run — verify the qualifying_income manually.'
-  }
-})
-
-const showUseSpotrac = computed(() =>
-  ['mismatch', 'spotrac_only'].includes(salaryVerify.value?.verdict))
-
-// Employer/pattern names rarely match character-for-character ("the Denver Broncos
-// Football Club" vs "Denver Broncos"), so equality is containment either way
-// on a normalized form — a mismatch flag on a cosmetic difference would teach
-// the user to ignore the line.
-function normName(s) {
-  return String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ').trim()
-}
-function nameVerify(cur, spo, what) {
-  if (inputs.no_contracted_income || spotrac.value === null) return null
-  if (!spo) return cur ? { verdict: 'docs_only', msg: `Spotrac: no ${what} found — documents only.` } : null
-  const a = normName(cur), b = normName(spo)
-  if (!a) return { verdict: 'spotrac_only', msg: `⚠ Spotrac lists ${spo} — the documents produced none.`, value: spo }
-  return (a.includes(b) || b.includes(a))
-    ? { verdict: 'match', msg: `✓ Matches Spotrac: ${spo}` }
-    : { verdict: 'mismatch', msg: `⚠ Spotrac lists ${spo} — verify.`, value: spo }
-}
-
-const teamVerify = computed(() => nameVerify(inputs.employer, spotrac.value?.employer, 'employer'))
-const leagueVerify = computed(() => nameVerify(inputs.pattern, spotrac.value?.pattern, 'pattern'))
-
-// The pattern drives the pay-cadence default, so taking Spotrac's pattern must
-// also reload the cadence (the input's @change doesn't fire on programmatic sets).
-async function useSpotracLeague() {
-  inputs.pattern = spotrac.value.pattern
-  await loadCadence()
 }
 
 // --- pull from the Credit Memo tab -----------------------------------------
@@ -293,29 +217,6 @@ async function readDocuments() {
       if (v !== null && v !== undefined && v !== '') inputs[k] = v
     }
 
-    // Spotrac cross-check (run by the backend): verification lines under the
-    // qualifying_income / employer / pattern fields. A field is FILLED from Spotrac only when
-    // the documents produced nothing — clearly labeled below, and the pattern
-    // fill lands before loadCadence() so the right pay-cadence default seeds.
-    spotrac.value = (ed.salary_check || ed.spotrac_team || ed.spotrac_league)
-      ? { check: ed.salary_check || null, employer: ed.spotrac_team || '', pattern: ed.spotrac_league || '' }
-      : null
-    const fromSpotrac = []
-    if (!inputs.no_contracted_income) {
-      if (!inputs.qualifying_income && spotrac.value?.check?.spotrac_salary) {
-        inputs.qualifying_income = spotrac.value.check.spotrac_salary
-        fromSpotrac.push('guaranteed qualifying_income')
-      }
-      if (!inputs.employer && spotrac.value?.employer) {
-        inputs.employer = spotrac.value.employer
-        fromSpotrac.push('employer')
-      }
-      if (!inputs.pattern && spotrac.value?.pattern) {
-        inputs.pattern = spotrac.value.pattern
-        fromSpotrac.push('pattern')
-      }
-    }
-
     const dateFills = inputs.no_contracted_income
       ? ['funding_date', 'expected_exit_date']
       : ['income_horizon', 'funding_date', 'expected_exit_date']
@@ -364,7 +265,7 @@ async function readDocuments() {
     }
 
     const gaps = []
-    if (!inputs.qualifying_income) gaps.push('guaranteed qualifying_income')
+    if (!inputs.qualifying_income) gaps.push('qualifying income')
     if (!inputs.loan_amount) gaps.push('loan amount')
     if (!inputs.funding_date) gaps.push('funding date')
     if (!ed.pay_frequency && !ed.season_start) {
@@ -380,9 +281,6 @@ async function readDocuments() {
       .filter(Boolean).join(' · ')
     readStatus.type = gaps.length ? 'info' : 'ok'
     readStatus.msg = '✓ Read the documents — review below'
-      + (fromSpotrac.length
-        ? `. The documents didn't state ${fromSpotrac.join(', ')} — filled from Spotrac; verify against the executed contract`
-        : '')
       + (gaps.length ? `. Still needed: ${gaps.join(', ')}.` : '. Ready to run.')
 
     // Carry the deal terms forward to the Credit Memo tab straight away, so the
@@ -424,7 +322,7 @@ function sendToMemo() {
     if (v !== null && v !== undefined && v !== '' && !t[k]) {
       t[k] = v
       // Record the carry so the memo tab knows this value was seeded, not
-      // set by the underwriter (its Spotrac-primary prefill may supersede it).
+      // set by the underwriter (the memo's own prefill may supersede it).
       if (props.carriedTerms) props.carriedTerms[k] = v
       filled++
     }
@@ -446,11 +344,11 @@ function resetCadence() {
   loadCadence()
 }
 
-// --- bonus events ----------------------------------------------------------
-function addBonus() {
+// --- income events ----------------------------------------------------------
+function addIncomeEvent() {
   inputs.income_events.push({ label: '', date: '', amount: null, guaranteed: true })
 }
-function removeBonus(i) {
+function removeIncomeEvent(i) {
   inputs.income_events.splice(i, 1)
 }
 
@@ -579,9 +477,10 @@ function applyToLoanDocs() {
     <h2><span class="step">1</span> Upload deal documents</h2>
     <input type="file" multiple @change="onFiles" />
     <p class="hint">
-      The player contract (with its pay schedule), the term sheet, and the personal
-      financial statement. Claude reads the pay cadence, guarantee language, bonus
-      dates and deal terms — everything below fills in from these.
+      Tax returns and K-1s, leases or a rent roll, an employment or services
+      agreement, the term sheet, and the personal financial statement. Claude
+      reads the income cadence, what is contractually committed, the dated
+      receipts and the deal terms — everything below fills in from these.
     </p>
     <ul v-if="files.length" class="filelist">
       <li v-for="(f, i) in files" :key="f.name + f.size">
@@ -613,12 +512,12 @@ function applyToLoanDocs() {
 
     <label class="inline chk nocontract">
       <input type="checkbox" v-model="inputs.no_contracted_income" />
-      Athlete does not have a contract with a Employer / employer
+      Borrower has no contracted income
     </label>
     <p v-if="inputs.no_contracted_income" class="hint note">
-      🏳 No employer contract: the projection runs on <strong>Other income (annual)</strong>
-      and the dated payments in Step 4 only — no qualifying_income, no qualifying_income cadence. The
-      contract fields below are ignored, and selecting a structure will carry this
+      🏳 No contracted income: the projection runs on <strong>Other income (annual)</strong>
+      and the dated receipts in Step 4 only — no recurring income, no cadence. The
+      income fields below are ignored, and selecting a structure will carry this
       to the Loan Documents tab (which drops the Payment Direction Letter).
       If a <strong>proposed contract</strong> is on the table, enter it here: it sizes
       the loan (30% LTI, flagged for credit approval) and its signing becomes the
@@ -636,43 +535,36 @@ function applyToLoanDocs() {
 
     <div class="grid">
       <label>Borrower <input v-model="inputs.borrower_name" /></label>
-      <label>Employer
+      <label>Business / employer
         <input v-model="inputs.employer" :disabled="inputs.no_contracted_income" />
-        <span v-if="teamVerify" :class="['verify', VERDICT_CLASS[teamVerify.verdict]]">
-          {{ teamVerify.msg }}
-          <button v-if="teamVerify.value" type="button" class="use"
-                  @click="inputs.employer = spotrac.employer">Use Spotrac</button>
-        </span>
       </label>
-      <label>Pattern
+      <label>Income pattern
         <input v-model="inputs.pattern" list="patterns" @change="loadCadence"
-               :disabled="inputs.no_contracted_income" placeholder="NFL / NBA / MLB / NHL / MLS" />
+               :disabled="inputs.no_contracted_income"
+               placeholder="PAYROLL / DISTRIBUTIONS / RENTS / SEASONAL / PROJECT" />
         <datalist id="patterns">
           <option v-for="c in cadences" :key="c.pattern" :value="c.pattern" />
         </datalist>
-        <span v-if="leagueVerify" :class="['verify', VERDICT_CLASS[leagueVerify.verdict]]">
-          {{ leagueVerify.msg }}
-          <button v-if="leagueVerify.value" type="button" class="use"
-                  @click="useSpotracLeague">Use Spotrac</button>
-        </span>
+        <span class="verify-note">How the money actually arrives. Sets the
+          cadence default below, which you can then edit.</span>
       </label>
-      <label>Guaranteed season qualifying_income
+      <label>Qualifying income (annual)
         <input v-model.number="inputs.qualifying_income" type="number" :disabled="inputs.no_contracted_income" />
-        <span v-if="salaryVerify" :class="['verify', VERDICT_CLASS[salaryVerify.verdict]]">
-          {{ salaryVerifyMsg }}
-          <button v-if="showUseSpotrac" type="button" class="use"
-                  @click="inputs.qualifying_income = salaryVerify.spotrac_salary">Use Spotrac figure</button>
-          <a v-if="salaryVerify.spotrac_url" :href="salaryVerify.spotrac_url"
-             target="_blank" rel="noopener">view&nbsp;↗</a>
-        </span>
-        <span v-if="salaryVerify?.note" class="verify-note">{{ salaryVerify.note }}</span>
+        <span class="verify-note">Documented and recurring. Quarterly or annual
+          receipts are better entered as dated income events below than spread
+          evenly here.</span>
       </label>
       <label>Other income (annual) <input v-model.number="inputs.other_income" type="number" /></label>
       <label>Other debt service (annual) <input v-model.number="inputs.other_debt_annual" type="number" /></label>
-      <label>Contract end <input v-model="inputs.income_horizon" type="date" :disabled="inputs.no_contracted_income" /></label>
+      <label>Income horizon
+        <input v-model="inputs.income_horizon" type="date" :disabled="inputs.no_contracted_income" />
+        <span class="verify-note">The date documented income runs out — the
+          earliest lease expiry or agreement end the facility depends on, not
+          the latest.</span>
+      </label>
       <label class="inline chk">
         <input type="checkbox" v-model="inputs.income_contracted" :disabled="inputs.no_contracted_income" />
-        Salary is fully guaranteed
+        Income is contracted through maturity
       </label>
     </div>
     <p class="hint">
@@ -685,12 +577,12 @@ function applyToLoanDocs() {
   <section class="card">
     <h2><span class="step">3</span> Terms being tested</h2>
     <div class="grid">
-      <label>Total remaining contract value
-        <input v-model.number="contractRemaining" type="number" placeholder="LTI basis — else season qualifying_income" /></label>
+      <label>Contracted income over the facility term
+        <input v-model.number="contractRemaining" type="number" placeholder="LTI basis — else the annual qualifying income" /></label>
     </div>
     <button class="ghost" :disabled="proposing" @click="proposeTerms">
       {{ proposing ? 'Working…' : inputs.no_contracted_income
-        ? '✨ Propose terms from the proposed contract' : '✨ Propose terms from the contract' }}
+        ? '✨ Propose terms from the pending proceeds' : '✨ Propose terms from the income' }}
     </button>
     <p v-if="inputs.no_contracted_income" class="hint">
       No executed contract: the amount is capped at 30% LTI of the <strong>Proposed
@@ -736,23 +628,24 @@ function applyToLoanDocs() {
     <h3 class="sub">Event-driven exit</h3>
     <div class="grid">
       <label>Expected exit date <input v-model="inputs.expected_exit_date" type="date" /></label>
-      <label>What the exit is <input v-model="inputs.expected_exit_label" placeholder="e.g. contract extension signing" /></label>
+      <label>What the exit is <input v-model="inputs.expected_exit_label" placeholder="e.g. sale of the Harbor Road lot" /></label>
     </div>
     <p class="hint">
       Fill these in when repayment depends on an event rather than on income —
-      a contract signing, an endorsement close, a sale. That is what turns a
-      balloon from a default into the right answer.
+      a property sale, a refinance commitment, a business sale, a contract award.
+      That is what turns a balloon from a default into the right answer.
     </p>
 
     <h3 class="sub">Underwriting assumptions</h3>
     <div class="grid">
       <label>Minimum coverage <input v-model.number="inputs.min_coverage" type="number" step="0.05" /></label>
-      <label>Agent commission (%) <input v-model.number="inputs.fee_off_gross_pct" type="number" step="0.5" /></label>
+      <label>Fee off gross income (%) <input v-model.number="inputs.fee_off_gross_pct" type="number" step="0.5" /></label>
     </div>
     <p class="hint">
-      Taxes (45%) and living expenses (10%) follow the credit memo's rules. Agent
-      commission defaults to 0% so this projection ties out to the memo exactly —
-      setting it deliberately runs below the memo.
+      Taxes (45%) and living expenses (10%) follow the credit memo's rules. The
+      off-gross fee (a management or agency commission taken before the borrower
+      sees the money) defaults to 0% so this projection ties out to the memo
+      exactly — setting it deliberately runs below the memo.
     </p>
 
     <button class="ghost" @click="sendToMemo">→ Send deal terms to Credit Memo</button>
@@ -761,22 +654,15 @@ function applyToLoanDocs() {
 
   <!-- Step 3: pay cadence -->
   <section class="card">
-    <h2><span class="step">4</span> Pay cadence</h2>
+    <h2><span class="step">4</span> Income cadence</h2>
     <p v-if="inputs.no_contracted_income" class="hint note">
-      🏳 No employer contract — the qualifying_income cadence is not used. Income comes from
-      Other income (annual, spread evenly) and the dated payments below, which
+      🏳 No contracted income — the income cadence is not used. Income comes from
+      Other income (annual, spread evenly) and the dated receipts below, which
       are what the candidate structures will be scored against.
     </p>
     <template v-if="!inputs.no_contracted_income">
     <p v-if="cadence.label" class="cad-label">{{ cadence.pattern || 'Custom' }} — {{ cadence.label }}</p>
-    <p v-if="leagueVerify && leagueVerify.verdict === 'match'" class="verify ok">
-      ✓ Pattern confirmed on Spotrac — the season window and pay frequency below follow
-      the {{ inputs.pattern }} default unless the contract stated its own.
-    </p>
-    <p v-else-if="leagueVerify && leagueVerify.verdict === 'mismatch'" class="verify warn">
-      ⚠ Spotrac lists a different pattern ({{ spotrac.pattern }}) — the season window and
-      pay frequency below follow the pattern in Step 2, so settle that first.
-    </p>
+    <p v-if="cadence.notes" class="verify muted">{{ cadence.notes }}</p>
     <div class="grid">
       <label>Pay frequency
         <select v-model="cadence.pay_frequency">
@@ -785,9 +671,9 @@ function applyToLoanDocs() {
       </label>
       <label class="inline chk">
         <input type="checkbox" v-model="cadence.year_round" />
-        Paid year round (not season-only)
+        Earns year round (not seasonal)
       </label>
-      <label>Season starts
+      <label>Income season starts
         <div class="pair">
           <select v-model.number="cadence.season_start_month">
             <option v-for="(m, i) in MONTHS" :key="m" :value="i + 1">{{ m }}</option>
@@ -795,7 +681,7 @@ function applyToLoanDocs() {
           <input v-model.number="cadence.season_start_day" type="number" min="1" max="31" />
         </div>
       </label>
-      <label>Season ends
+      <label>Income season ends
         <div class="pair">
           <select v-model.number="cadence.season_end_month">
             <option v-for="(m, i) in MONTHS" :key="m" :value="i + 1">{{ m }}</option>
@@ -808,26 +694,27 @@ function applyToLoanDocs() {
     <button class="ghost" @click="resetCadence">↻ Reset to the pattern default</button>
     </template>
 
-    <h3 class="sub">Bonuses &amp; dated lump payments</h3>
+    <h3 class="sub">Dated receipts</h3>
     <table v-if="inputs.income_events.length" class="cover-tbl">
       <thead>
         <tr><th>Label</th><th>Date</th><th>Amount</th><th>Guaranteed</th><th></th></tr>
       </thead>
       <tbody>
         <tr v-for="(b, i) in inputs.income_events" :key="i">
-          <td><input v-model="b.label" placeholder="Signing bonus installment" /></td>
+          <td><input v-model="b.label" placeholder="Q3 owner distribution" /></td>
           <td><input v-model="b.date" type="date" /></td>
           <td><input v-model.number="b.amount" type="number" /></td>
           <td class="ctr"><input type="checkbox" v-model="b.guaranteed" /></td>
-          <td class="ctr"><button type="button" class="rm" @click="removeBonus(i)">✕</button></td>
+          <td class="ctr"><button type="button" class="rm" @click="removeIncomeEvent(i)">✕</button></td>
         </tr>
       </tbody>
     </table>
-    <button class="ghost" @click="addBonus">+ Add a bonus / lump payment</button>
+    <button class="ghost" @click="addIncomeEvent">+ Add a dated receipt</button>
     <p class="hint">
-      Signing-bonus installments, roster bonuses, endorsement milestones. These land
-      on their own date rather than following the qualifying_income cadence — an NHL July 1
-      bonus is often the largest cash event of the year, and a natural balloon date.
+      Owner distributions, an annual bonus, a milestone or progress billing, a
+      maturing note receivable. These land on their own date rather than following
+      the income cadence — a quarterly distribution is often the largest cash
+      event of the year, and a natural balloon date.
     </p>
   </section>
 
@@ -853,7 +740,7 @@ function applyToLoanDocs() {
       <h3 class="sub">Projected cash flow</h3>
       <table class="cover-tbl flow">
         <thead>
-          <tr><th>Month</th><th>Season</th><th>Gross</th><th>Available</th>
+          <tr><th>Month</th><th>Earning</th><th>Gross</th><th>Available</th>
               <th>Cumulative</th><th class="wide">Shape</th></tr>
         </thead>
         <tbody>
@@ -1005,7 +892,7 @@ button.sm { padding: 5px 10px; font-size: 12px; margin: 0; }
 .rm { background: transparent; color: #b00020; border: 0; padding: 0 4px; margin: 0;
   font-size: 13px; cursor: pointer; }
 
-/* Spotrac verification lines — same look as the memo tab's (App.vue). */
+/* Verification / guidance lines — same look as the memo tab's (App.vue). */
 .verify { font-size: 11px; line-height: 1.45; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .verify.ok { color: #0f6e56; }
 .verify.warn { color: #9a6b00; }

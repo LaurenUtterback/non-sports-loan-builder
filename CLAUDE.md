@@ -5,14 +5,51 @@ laid out, where the important logic lives, and the rules that must not regress.
 
 ## What this is
 
-A web app that builds credit memorandums for professional-athlete loans at South
-River Capital. A user uploads deal documents (contract, PFS, credit report),
-Claude extracts the structured data, the user confirms deal terms, and the app
-generates a formatted credit memo that can be downloaded as HTML, PDF, or Word.
+A web app that builds credit memorandums and closing packages for South River
+Capital's NON-SPORTS loans. A user uploads deal documents (tax returns, PFS,
+leases, an employment or services agreement, a credit report), Claude extracts
+the structured data, the user confirms deal terms, and the app generates a
+formatted credit memo downloadable as HTML, PDF or Word — plus deal structuring,
+a participation agreement, the closing document package and the closing binder.
 
-It was ported from a single React component into a Python (FastAPI) backend and
-a Vue 3 frontend. The port moved the Anthropic API call server-side so the API
-key is never exposed in the browser.
+Three borrower profiles, set by the underwriter on the memo tab and never by
+extraction: **business** (owner / executive), **investment** (investment and
+real estate) and **consumer** (general consumer / commercial).
+
+It was FORKED from `credit-memo-builder` (the athlete-loan builder at
+`C:\Users\Lauren Utterback\credit-memo-builder`, commit d590fed) and runs
+alongside it, never on top of it: **backend :8001, frontend :5174**. The athlete
+builder keeps :8000 / :5173. The two share no code and no process — a change
+here cannot break a memo over there.
+
+### What changed in the fork, and what did not
+
+Replaced, because an athlete's spine is not a non-sports borrower's:
+
+| Athlete builder | Here |
+| --- | --- |
+| guaranteed season salary | `qualifying_income` — documented, recurring, annual |
+| total remaining contract value | `contracted_income` — committed by contract or lease over the facility term |
+| LTC (loan ÷ guaranteed earnings) | LTI (loan ÷ income basis), plus **LTV** and **DSCR** |
+| team / league / sport / agent | employer / industry / occupation / advisor |
+| Spotrac + Wikipedia research | nothing — the documents are the only source |
+| `is_college` (college mode) | `profile` (three borrower profiles) |
+| DDD (death, disability & disgrace) | life / disability / key-person insurance |
+| league pay cadences (NFL, NBA, …) | income patterns (payroll, distributions, rents, seasonal, project) |
+| the team contract, Player, Team | the assigned contract, Borrower, Payor |
+
+Kept whole, because none of it was ever about athletes: the PFS handling and
+the stale-PFS roll-forward with its four treatments (rule 15), the uses-of-funds
+waterfall (rule 14), the credit-report paragraph, the 45% tax / 10% living
+rules, SSN masking, the legal-name rule, the memo's design and pagination, and
+every instrument in the closing package.
+
+Deliberately NOT carried over: the restatement of the PFS's contract asset (old
+rule 10's Section IX footnote). Its non-sports counterpart — a property the
+statement values above its appraisal — needs the underwriter to say WHICH asset
+row to restate, and guessing that row from a collateral description would
+silently mismark a balance sheet. See the note where it used to live in
+`calculations.py`.
 
 ## Layout
 
@@ -23,13 +60,13 @@ backend/                 FastAPI + the authoritative business logic
     models.py            Pydantic models — the API contract
     extraction.py        Anthropic document extraction (holds the prompt)
     doc_blocks.py        uploads -> Anthropic content blocks (all 3 uploaders)
-    research.py          Wikipedia + Spotrac research on the athlete (Section V)
+    venv_python.py       locating the venv interpreter for subprocess renders
     memo.py              Renders the memo (Jinja2 HTML, PDF, Word)
     main.py              FastAPI routes
     templates/memo.html.j2   the memo design (HTML/CSS)
     logo.txt             base64 logo data URI
   tests/
-    test_calculations.py LOCKS IN the rules using the Alvarado reference deal
+    test_calculations.py LOCKS IN the rules using the reference deal
 frontend/                Vue 3 + Vite UI
   src/
     App.vue              the whole flow (upload → terms → generate → export)
@@ -55,7 +92,30 @@ never silently.
 7. Alimony / child support is a cash-flow item ONLY. Never a PFS liability.
 8. Auto loan balances are never a separate PFS liability (they live inside
    "Notes Payable to: others"). Monthly auto PAYMENTS still appear in the cash flow.
-9. Salary used everywhere is the GUARANTEED portion of compensation only —
+9. QUALIFYING INCOME is the borrower's ANNUAL income that underwriting can
+   stand behind: documented, recurring, and already received or contractually
+   committed. It is composed per source — W-2 wages and recurring guaranteed
+   bonus; owner income from K-1 / S-corp / Schedule C at the borrower's
+   OWNERSHIP PERCENTAGE, from tax returns over any internal statement; net
+   rental income (gross rents LESS operating expenses, taxes, insurance and
+   existing mortgage debt service — never gross rents); recurring interest,
+   dividends and required distributions. EXCLUDED: capital gains and sale
+   proceeds, loan proceeds, gifts, one-time items, anything ending before
+   maturity, and any figure appearing only in a projection or pro forma. When
+   income varies year to year the MOST RECENT COMPLETE YEAR is reported, with
+   the prior years and the trend in `income_notes` — never an average, never
+   the best year. A filed tax return governs over a business-prepared
+   statement, which governs over a borrower-prepared summary. The rules live
+   in the extraction prompt; `income_notes` is where the composition, the
+   ownership percentage, the exclusions and any untaken add-back are
+   disclosed.
+
+   (The athlete builder's rule 9 — guaranteed base plus guaranteed annual
+   bonuses, with worked examples from signing-bonus installment schedules —
+   is gone entirely. Nothing in a non-sports deal works that way.)
+
+   OLD RULE 9, FOR REFERENCE ONLY, NOT IN FORCE HERE: Salary used everywhere
+   was the GUARANTEED portion of compensation only —
    the guaranteed base salary PLUS any bonus that is guaranteed and paid every
    year of the contract (annual signing-bonus installments, guaranteed yearly
    roster bonuses). Non-guaranteed incentives, one-time bonuses, and
@@ -75,9 +135,24 @@ never silently.
    (sentence + "Total Contract Remaining" table row). (Changed 2026-07-06:
    annual guaranteed bonuses used to be excluded; now they are added into
    salary.)
-10. LTC (Loan-to-Contract) = loan amount / guaranteed earnings, where
-    guaranteed earnings is the TOTAL REMAINING contract value when extracted
-    (`contract_remaining`), else the guaranteed season salary. Section I's
+10. LTI (Loan-to-Income) = loan amount / the income basis, where the income
+    basis is `contracted_income` (income committed by contract or lease over
+    the facility's term) when there is any, else the annual
+    `qualifying_income`. This is the athlete builder's LTC with its basis
+    rule intact — contracted income plays the role the remaining contract
+    value played. CONFIRMED TERMS WIN: both are deal-terms fields resolved
+    `terms.x or ed.x`, and `build_cash_flow` takes the confirmed income, so a
+    corrected figure moves Section VII and Section VIII together.
+
+    Two more ratios join it, both computed from the same cash flow the body
+    reports so the coversheet cannot disagree with the sections behind it:
+    * **LTV** = loan / `collateral_value`. An unsecured deal (no collateral
+      pledged) reports N/A — never a passing 0%. An unsecured facility has no
+      LTV; it does not have a perfect one.
+    * **DSCR** = cash available for debt service / total debt service, from
+      `build_cash_flow`'s own `avail` and `total_ds`.
+
+    OLD RULE 10, NOT IN FORCE HERE (the contract-asset restatement): Section I's
     "advance against $X in guaranteed salary" figure uses the same basis
     (Lauren, 2026-07-06). The cash flow still runs on the season salary.
     CONFIRMED TERMS WIN (2026-08-18). Both the guaranteed salary and the
@@ -89,7 +164,8 @@ never silently.
     had no field in Step 2 at all, so the LTC / "Guaranteed Remaining" basis
     could not be changed from the UI. Step 2 now carries "Guaranteed remaining
     (LTC basis)", pre-filled from Spotrac since 2026-08-25 with the documents
-    as backup (see "Spotrac is PRIMARY" below).
+    as backup. (That whole Spotrac arrangement is gone here — see "No public
+    research" below.)
     When a CONFIRMED remaining contract value differs from the contract asset
     the PFS reports, Section IX restates that asset to the confirmed figure and
     footnotes it ("restated from the $X reported ... to the $Y ... confirmed at
@@ -115,12 +191,13 @@ never silently.
     in the documents (a term sheet's "Term: N months"), falling back to the
     funding-to-maturity span. Captured by `loan_term_months` (extraction.py) and
     resolved by `calc.loan_term_months`.
-16. The memo phrases the borrower as "a Professional <sport> player", so the
-    sport value is normalized (`calc.normalize_sport`) to drop a leading
-    "professional". As a source-agnostic backstop, `_dedupe_professional` (memo.py)
-    collapses any consecutive duplicate "professional" in the rendered HTML
-    (e.g. from a captured narrative). The memo must never render
-    "Professional Professional ...".
+16. GONE. The athlete builder phrased the borrower as "a Professional <sport>
+   player" and needed `normalize_sport` plus a `_dedupe_professional` backstop
+   so the memo never read "Professional Professional". There is no such
+   phrasing here; both were removed. `calc.normalize_profile` /
+   `calc.profile_label` took their place, and they do something different —
+   they default an unrecognised borrower profile to "business" so the memo
+   never renders with an empty FAQ.
 
 17. STALE-PFS ROLL-FORWARD ("Method A" — Lauren's standing rule, 2026-08-05,
     applied to every memo). When the PFS is more than a month older than the
@@ -179,8 +256,28 @@ never silently.
     guards against pairing a payment with the wrong lender, and Step 2b exists
     so the underwriter can catch what slips through.
 
-18. DEAL SUMMARY & POLICY COMPLIANCE COVERSHEET (added 2026-08-10, from
-    Lauren's paper template). The memo's page 1 is an auto-filled coversheet:
+18. DEAL SUMMARY & POLICY COMPLIANCE COVERSHEET. The memo's page 1 is an
+    auto-filled coversheet: a deal-summary block (borrower, business/employer
+    and industry, loan, term, collateral, income basis, LTI, LTV, DSCR) and a
+    policy checklist, each row Pass / Exc. / N/A. `calc_policy_compliance`
+    computes it from the SAME figures the memo body reports.
+
+    **THE THRESHOLDS ARE PLACEHOLDERS.** `LTI_MAX_PCT` 50%, `LTV_MAX_PCT` 65%
+    and `DSCR_MIN` 1.25x are ordinary commercial-credit starting points, not
+    South River policy. Every coversheet prints `POLICY_PROVISIONAL` saying so
+    until Lauren sets the real numbers — delete that sentence (and the
+    template's use of it) when she does. An approver must never read a
+    placeholder as a credit-committee limit.
+
+    The athlete checklist is gone entirely: no contract-note leverage, no
+    salary-guarantee row, no payroll sweep, no UCC-1-on-contract-receivable,
+    no DDD row, no US-work-authorization row, no no-new-contract-debt row.
+    `test_compliance_omits_the_athlete_criteria` locks that. LTV, which the
+    athlete coversheet retired in 2026-08-25, is a live test again here under
+    its own label — that retirement was about athlete lending.
+
+    HISTORY OF THE ATHLETE COVERSHEET, FOR REFERENCE ONLY (added 2026-08-10,
+    from Lauren's paper template). The memo's page 1 is an auto-filled coversheet:
     a deal-summary block (borrower, team/league, loan, term, collateral,
     guaranteed remaining, repayment, LTC) and a 9-row policy checklist, each
     row Pass / Exc. / N/A. `calc_policy_compliance` (calculations.py) computes
@@ -203,9 +300,24 @@ never silently.
     `_exceptions_html` (memo.py) into the coversheet page of memo.html.j2
     (screen footers are now "of 7"). Locked by the `test_compliance_*` tests.
 
-19. DDD INSURANCE FOLLOWS THE DISBURSEMENT (Lauren, 2026-08-26). The memo
-    claims a DDD (death, disability & disgrace) policy ONLY when the
-    documents' own disbursement breakdown carries the premium line (e.g.
+19. INSURANCE FOLLOWS THE DISBURSEMENT. The memo claims a life / disability /
+   key-person policy ONLY when the documents' own disbursement breakdown
+   carries the premium line. This is the athlete builder's DDD rule with a
+   wider regex (`calc._INSURANCE_RE` also matches life, credit-life and
+   key-person, and still matches DDD so a legacy disbursement is recognised)
+   and `calc.has_insurance` in place of `has_ddd_insurance`. The behaviour is
+   unchanged: without a premium line the memo body's mentions drop out (both
+   Tertiary repayment-source cards, the Section II bullet, Section III's
+   repayment cell, the FAQ's assigned-policy bullet) and the mitigants
+   sentence loses its insurance clause
+   (`STANDARD_MITIGANTS_NO_INSURANCE`); the COVERSHEET always keeps its
+   insurance row, reading "If applicable" / "None in place" (N/A, a statement
+   of fact, not an exception), and the Collateral cell closes with
+   "· No Insurance".
+
+   THE ORIGINAL DDD RULE, FOR REFERENCE (Lauren, 2026-08-26): the memo
+   claimed a DDD (death, disability & disgrace) policy ONLY when the
+   documents' own disbursement breakdown carried the premium line (e.g.
     "DDD insurance ($17,000)" — either side of the to-Borrower subtotal).
     When the disbursement does not reflect DDD insurance — or the documents
     carry no breakdown at all — the MEMO BODY's mentions drop out (both
@@ -228,7 +340,22 @@ never silently.
     the `test_ddd_*` / `test_memo_*_ddd_*` / `test_memo_reads_no_insurance_*`
     / `test_compliance_ddd_row_reads_none_in_place_without_the_policy` tests.
 
-20. COLLEGE-ATHLETE MODE (Lauren, 2026-09-14). `DealTerms.is_college` — a
+20. BORROWER-PROFILE MODE. `DealTerms.profile` — a select at the top of the
+    memo tab's Step 2, default "business", never set by extraction — swaps the
+    memo's risk FAQ (Section IV), purpose language (Section I) and primary
+    repayment source (Section XI):
+    * **business**: customer concentration; income volatility and how the
+      qualifying income was taken; key-person risk.
+    * **investment**: vacancy and tenant default; collateral valuation (with
+      the LTV and the equity cushion named); refinancing risk at maturity.
+    * **consumer**: income interruption; death or disability.
+    The over-leverage item is payor-agnostic and prints on all three.
+    Everything else — coversheet, guarantee assertions, income basis, LTI,
+    cash flow — is UNCHANGED across profiles. Locked by the
+    `test_memo_defaults_to_the_business_owner_faq` / `test_*_profile_*` tests.
+
+    THE COLLEGE MODE THIS REPLACED, FOR REFERENCE ONLY (Lauren, 2026-09-14):
+    `DealTerms.is_college` was a
     checkbox at the top of the memo tab's Step 2 ("College athlete (revenue
     share / NIL)"), default off, never set by extraction — swaps the memo's
     pro-league language for college language. Section IV's FAQ: the suspension
@@ -276,13 +403,11 @@ never silently.
       defective. Blank falls back to the last word of the name, as before; a
       generational suffix always moves to the MIDDLE NAME / SUFFIX cell, where
       it belonged all along (`loandocs._split_name`).
-    * Research. Spotrac and Wikipedia index the COMMON name, so `research.py`
-      also searches the name minus its trailing surname (never minus the
-      FIRST one — strangers really are named that, and the league check would
-      wave one through), matches results on either half of the surname with
-      the given name breaking ties, and trims the player page on whichever
-      form it finds. Without that a compound-surname borrower silently loses
-      the Spotrac salary prefill and the Section V narrative.
+    * Research. NOT APPLICABLE HERE. The athlete builder also had to search
+      public sources under the COMMON name (Spotrac and Wikipedia index that,
+      not the full legal name), with its own rules about which surname to
+      drop. This builder does no public research at all, so the legal name is
+      used everywhere without qualification.
 
 
 The Alvarado reference deal: $12,267,600 assets, $10,373,361 total liabilities,
@@ -392,109 +517,70 @@ It also holds `LEGAL_NAME_RULE` (rule 21), the one copy of the borrower-name
 rule that every other uploader imports and appends to its own prompt. Change it
 there, never per tab.
 
-## Spotrac is PRIMARY for Guaranteed salary & remaining (Step 2)
+## No public research — the documents are the only source
 
-SPOTRAC FIRST, CONTRACT AS BACKUP (Lauren, 2026-08-25 — decided on a deal
-whose uploaded contract package was stale and the extraction picked the prior
-season's salary row): the memo's Guaranteed salary and Guaranteed remaining
-(LTC basis) prefills come from the athlete's Spotrac page; the figures the
-documents produced are the backup, used when Spotrac gives nothing and always
-shown as the cross-check. The extraction prompt still settles the documents'
-salary from ALL uploaded documents (compensation paragraphs, guarantee
-addenda/riders/exhibits, term sheets; the executed contract governs on
-conflict) — that figure now rides on the check as `doc_salary` /
-`doc_remaining` instead of filling the fields when Spotrac produced a figure.
+The athlete builder ran two extra Claude calls over Wikipedia + Spotrac: one to
+write Section V, one to cross-check the guaranteed salary and remaining contract
+value against Spotrac (which was the PRIMARY source for those two prefills from
+2026-08-25). **Neither is carried over, and `research.py` is deleted.** No public
+source indexes a private borrower's income the way Spotrac indexes a playing
+contract, and a business owner's name is not a reliable public index at all — a
+lookup would return either nothing or the wrong person, and an underwriter who
+learned to trust it would be misled exactly when it mattered.
 
-- `research.py`'s Spotrac fetch is done ONCE per extraction and feeds two
-  consumers: the Section V narrative and
-  `extraction._check_salary_against_spotrac`, a third Claude call that reads
-  the page for the season's CAP HIT (Lauren, 2026-08-06: base salary +
-  prorated signing bonus + other bonuses Spotrac counts for the season —
-  NEVER the base salary alone; with no cap hit on the page it composes base +
-  that season's bonuses) and, since 2026-08-25, the TOTAL REMAINING contract
-  value (current/upcoming season + all future seasons; completed seasons
-  excluded). How much Spotrac marks as GUARANTEED is reported in the check's
-  note, not netted out of the figure.
-- `extraction.apply_spotrac_precedence` makes the swap after the check runs:
-  a non-zero Spotrac figure replaces `Extraction.salary` /
-  `Extraction.contract_remaining`, and `salary_source` / `remaining_source`
-  record which source filled each field (per-field — Spotrac can win one and
-  the documents the other). Rule 10's "confirmed terms win" is unchanged: a
-  value the underwriter types still beats every prefill.
-- The verdict ("match" | "mismatch" | "docs_only" | "spotrac_only" |
-  "unavailable") is computed by `extraction.build_salary_check`
-  (tolerance 0.1%, min $1), NEVER by the model. Carried on
-  `Extraction.salary_check` (models.SalaryCheck). Locked by
-  `tests/test_salary_check.py`.
-- Best-effort: neither the fetch nor the check may ever break /api/extract —
-  any failure leaves the documents' figures in place (the backup).
-- App.vue recomputes the verdict live against whatever is in each field
-  (`salaryVerify` / `remainingVerify`, mirroring the same tolerance), shows
-  ✓/⚠ + Spotrac's note and a link, and offers "Use Spotrac figure" when the
-  field diverges from Spotrac and "Use contract figure" when the Spotrac
-  prefill differs from the documents — either way the underwriter decides,
-  the app only types the number.
-- The STRUCTURE tab still treats the documents as primary: it attaches the
-  same check for verification lines only (structure_extraction never calls
-  apply_spotrac_precedence). Flip it there only if Lauren asks.
-- CARRIED PREFILLS MUST NOT DEFEAT THE RULE (Lauren, 2026-09-02 — a memo
-  kept the contract's salary because the Structure tab, documents-first by
-  design, had seeded the memo's Step 2 salary via sendToMemo before the memo
-  extraction ran, and the blanks-only fill then skipped the Spotrac figure).
-  sendToMemo records what it carries in App.vue's `carriedTerms`
-  ({field: value}); runExtract treats a carried salary still matching that
-  record as a blank, so the Spotrac-primary figure supersedes it. A value
-  the underwriter EDITED no longer matches the record and still wins
-  (rule 10, confirmed terms win). The extraction status line now also says
-  what actually happened: prefilled from Spotrac / Spotrac figures kept out
-  by values already set (with the Use-Spotrac-figure hint) / Spotrac
-  produced no figure so the documents (the backup) filled in — the fallback
-  is never silent.
-
-## Section V — Project Sponsorship research
-
-Section V describes the ATHLETE and their playing career ONLY (background,
-league career, national/country team play when applicable) — it must never
-mention the loan, facility, funds, or use of proceeds, and it must contain NO
-financial information at all (no salaries, bonuses, contract values, or career
-earnings — that detail lives in Section VII Contract Analysis). Lauren,
-2026-07-06. After document
-extraction, `extraction.py`
-`_compose_sponsorship` makes a second Claude call that writes the narrative
-from public sources gathered by `research.py`:
-- Wikipedia via httpx (needs the descriptive User-Agent — Wikimedia 403s
-  browser-imitating UAs).
-- Spotrac via the same Playwright headless Chromium used for PDF export, with a
-  real-browser UA (Spotrac's CloudFront 403s plain HTTP clients and the default
-  HeadlessChrome UA). The API's web_search server tool is NOT available to
-  subscription OAuth tokens — don't try to switch to it.
-Research is best-effort: any failure keeps the document-derived
-`sponsorship_narrative` (and memo.py's one-line fallback below that). It must
-never make /api/extract fail.
-
-Playwright browser install — READ THIS before running `playwright install`:
-install the browsers from a PLAIN terminal (or a scheduled task), NEVER from
-inside an MSIX-packaged app (the Claude desktop app is one). A packaged
-process's writes to %LOCALAPPDATA% are silently virtualized into that app's
-sandbox (`AppData\Local\Packages\<pkg>\LocalCache\Local\...`), where only
-that app's own descendants can see them — every backend started at logon or by
-the keep-alive task then fails Playwright launches with a false "Executable
-doesn't exist", killing BOTH the Spotrac verification (the salary/team/league
-cross-checks) and PDF export. This bit four times (2026-07-10 → 08-25) before
-being root-caused; see `memo._render_pdf_subprocess`'s docstring for the story.
+Consequences:
+* Step 2 has no verification lines and no "Use Spotrac figure" buttons. The
+  documents fill the fields; the underwriter is the only cross-check.
+* `SalaryCheck` is gone from `models.py`, and the Structure tab's
+  `_verify_with_spotrac` with it.
+* **Section V (Borrower Background)** is written by the MAIN extraction call
+  from the uploaded documents (`Extraction.background_narrative`): who the
+  borrower is, their role and tenure, the business's line of work, how long it
+  has operated, its scale, its customer or tenant base. Documents only — the
+  prompt says so explicitly, and says to return null rather than pad with
+  generalities about the industry. The memo falls back to a one-line
+  name/role/employer sentence.
+* `memo.py`'s Playwright subprocess fallback used to import `_backend_python`
+  from `research.py`; it now lives in `venv_python.py`.
 
 ## Running locally
 
-Easiest: double-click **`Start Builder.bat`** in the repo root — it launches the
-backend and frontend in two minimized windows and opens http://localhost:5173.
-Keep those windows open while using the app; there is no auto-start on reboot.
+**Ports: backend :8001, frontend :5174.** The athlete builder
+(`credit-memo-builder`) keeps :8000 / :5173 — both can run at once, and the
+launcher below never touches its ports.
+
+Easiest: double-click **`Start Builder.bat`** in the repo root — it launches
+the backend and frontend in two minimized windows and opens
+http://localhost:5174. Keep those windows open while using the app.
+
+Or run `logs\start-servers.ps1`, which is idempotent: it checks each port and
+starts only what is down. The backend goes up with `Start-Process` (its
+`run_local.py` re-execs into a child that detaches on its own); the frontend
+MUST go up through the hidden WMI `Win32_Process.Create` the script uses —
+Vite started with a plain `Start-Process npm run dev` dies when the launching
+shell is cleaned up, and a visible console window is easy to close by
+accident, which kills Vite and makes the browser show "Failed to fetch".
 
 Manual:
-Backend:  see `backend/README.md` (uvicorn on :8000)
-Frontend: `cd frontend && npm install && npm run dev` (Vite on :5173, proxies /api)
+Backend:  `cd backend && .\.venv\Scripts\python.exe run_local.py` (:8001)
+Frontend: `cd frontend && npm run dev` (Vite on :5174, proxies /api to :8001)
 
-Note: the app is at **http://localhost:5173** (Vite binds the `localhost`/IPv6
-name, not `127.0.0.1` — `127.0.0.1:5173` can refuse the connection).
+Note: the app is at **http://localhost:5174** (Vite binds the `localhost`/IPv6
+name, not `127.0.0.1` — `127.0.0.1:5174` can refuse the connection).
+
+Two things the fork had to fix that the athlete builder never needed, both in
+`backend/pyproject.toml`:
+* **pillow is declared.** `doc_blocks._recompress_pdf` shrinks oversized
+  uploads through pypdf's `img.image` / `img.replace`, both Pillow-backed. The
+  athlete venv happened to have it; a fresh install did not, and collection
+  failed.
+* **playwright is pinned to 1.60.0**, the line this machine's cached
+  `chromium-1223` belongs to. A fresh install takes a newer playwright, looks
+  for a build nobody downloaded, and fails every PDF and binder render. Only
+  bump it together with `python -m playwright install chromium` run from a
+  PLAIN terminal or a scheduled task — NEVER from inside the Claude desktop
+  app, whose MSIX container virtualizes the download into a private overlay
+  that logon-started backends cannot see.
 
 ## Conventions
 
@@ -751,17 +837,20 @@ Credit memo upload (added 2026-07-08, sixth pass):
   prompt says not to guess, and anything notable comes back in `notes`
   (shown in the status line).
 
-No-team-contract checkbox (added 2026-07-09):
-- `LoanDocTerms.no_team_contract` (default False) + a checkbox at the top of
-  the tab's "Team & contract" group ("Athlete does not have a contract with a
-  Team / employer"). When checked: the team/contract fields are disabled and
-  the contract uploader is hidden; the cover page shows "None" for
-  Team / Employer and Contract (a Jinja conditional in the build script's
-  COVER block); and the Payment Direction Letter is dropped from the package
-  — enforced server-side in `render_html` regardless of the include flag
-  (the UI also unchecks and disables its checkbox, restoring it when
-  unchecked). "Pull deal info" and the memo reader skip team/league while
-  checked. Locked by `test_no_team_contract_drops_letter_and_blanks_cover`.
+No-contracted-income checkbox:
+- `LoanDocTerms.no_contracted_income` (default False) + a checkbox at the top
+  of the tab's "Payor & assigned contract" group ("No contract is being
+  assigned (unsecured — personal guarantee only)"), which is the ORDINARY case
+  on a non-sports deal: most facilities rest on the guarantee and a UCC-1 over
+  business assets, with no third-party contract to assign. When checked: the
+  payor/contract fields are disabled and the contract uploader is hidden; the
+  cover page shows "None" for Payor / Employer and Contract (a Jinja
+  conditional in the build script's COVER block); and the Payment Direction
+  Letter is dropped from the package — enforced server-side in `render_html`
+  regardless of the include flag (the UI also unchecks and disables its
+  checkbox, restoring it when unchecked). "Pull deal info" and the memo reader
+  skip the payor fields while checked. Locked by
+  `test_no_contracted_income_swaps_wording_and_blanks_cover`.
 - The LSA/UCC clauses that reference the Contract (rep 4.1(e), section 5.12,
   the collateral items and the Contract / Borrower's Employer definitions)
   still render with blank underscores in this mode - swapping or omitting
@@ -933,28 +1022,11 @@ Backend pieces:
   for `salary_guaranteed`. Do not re-declare these as plain `str`/`list`: one
   unstated field then fails the whole upload. The route also catches non-
   RuntimeError exceptions as a 422 naming the cause rather than a bare 500.
-- SPOTRAC CROSS-CHECK (Lauren, 2026-08-14): after the document extraction,
-  `structure_extraction._verify_with_spotrac` fetches the athlete's Spotrac
-  page (research.spotrac_lookup — the same Playwright fetch the memo uses) and
-  a second Claude call (`_ask_spotrac`, SPOTRAC_CHECK_PROMPT) reads it for the
-  season CAP HIT (same rule as the memo's check: base + prorated/counted
-  bonuses, never base alone), the CURRENT team, and the league. The salary
-  verdict comes from the memo's `extraction.build_salary_check` — computed
-  server-side, never by the model — and lands on
-  `StructureExtraction.salary_check` (models.SalaryCheck), with
-  `spotrac_team` / `spotrac_league` alongside. Best-effort by contract: any
-  failure leaves a "verify manually" note and never breaks /structure/extract.
-  StructureBuilder.vue shows live-recomputed verification lines under the
-  salary / team / league fields (mirroring App.vue's salaryVerify; team/league
-  match is normalized containment, so "the Denver Broncos Football Club" ==
-  "Denver Broncos"), offers "Use Spotrac" buttons (taking Spotrac's league
-  also reloads the cadence default), and fills a field from Spotrac ONLY when
-  the documents produced nothing — labeled in the status line. The documents
-  stay authoritative. Locked by `tests/test_structure_spotrac.py`.
-- Routes: `GET /api/structure/cadences`, `GET /api/structure/cadence/{league}`,
-  `POST /api/structure/extract`, `POST /api/structure/propose`,
-  `POST /api/structure/select`.
-- Tests: `tests/test_structure.py`.
+* NO SPOTRAC CROSS-CHECK. The athlete builder verified the extracted salary,
+  team and league against the athlete's Spotrac page here, offering "Use
+  Spotrac" buttons under those fields. It is gone, along with `research.py` —
+  see "No public research" above. The documents fill the fields and the
+  underwriter is the only cross-check.
 
 Rules encoded (S1-S6, in structure.py's docstring):
 S1. Taxes follow the CHECKS — 45% of each month's gross (rule 1 distributed by
@@ -1009,22 +1081,24 @@ Validated against a real NFL deal: the engine reproduces the season's 18 game
 checks across Sep–Jan, fails both amortizing structures, and recommends the
 bullet — matching the memo's own conclusion.
 
-NO-TEAM-CONTRACT MODE (Lauren, 2026-08-14 — mirrors loandocs'
-no_team_contract): `StructureInputs.no_team_contract` + a checkbox at the top
-of Step 2 ("Athlete does not have a contract with a Team / employer"). When
-checked: team/league/salary/contract-end/guarantee fields are disabled, the
-Spotrac verification lines are suppressed, extraction and Spotrac fills skip
-the contract fields, sendToMemo() never carries team/league/salary, the pay
-cadence controls are hidden (income = other income spread evenly + dated bonus
-events, which stay editable — they ARE the income), and "Propose terms" is
-disabled (its amount is capped against guaranteed earnings). ENFORCED
-SERVER-SIDE in `propose_structures` — salary is zeroed and salary_guaranteed
-forced False whatever the form carried, a note is added to the result, and
-`structure_summary.build_context` presents the no-contract header (the summary
-routes pass the ORIGINAL inputs, so a stale typed salary must not render).
-Applying a structure also sets the Loan Documents store's `no_team_contract`,
-which already blanks the cover and drops the Payment Direction Letter there.
-Locked by `tests/test_structure_no_contract.py`.
+NO-CONTRACTED-INCOME MODE (mirrors loandocs' no_contracted_income):
+`StructureInputs.no_contracted_income` + a checkbox at the top of Step 2
+("Borrower has no contracted income"). When checked: the employer / income
+pattern / qualifying-income / income-horizon / contracted fields are disabled,
+extraction skips them, sendToMemo() never carries them, the cadence controls
+are hidden (income = other income spread evenly + the dated income events,
+which stay editable — they ARE the income), and "Propose terms" runs off the
+pending proceeds instead. ENFORCED SERVER-SIDE in `propose_structures` — the
+income is zeroed and income_contracted forced False whatever the form carried,
+a note is added to the result, and a stale figure in a disabled field can
+never fund the projection.
+
+The athlete builder's version of this was "Athlete does not have a contract
+with a Team / employer", and PENDING PROCEEDS here play the role its PROPOSED
+(unexecuted) contract played: a sale, refinance or award the borrower expects
+but has not received. It sizes the loan (the LTI policy cap runs on it,
+flagged for credit approval) and its expected date becomes the exit event, but
+it is NEVER projected as income — nothing is owed until it closes.
 
 PROPOSED (UNEXECUTED) CONTRACT within no-contract mode (Lauren, 2026-08-14):
 `StructureInputs.proposed_contract_value` / `proposed_contract_date`, entered

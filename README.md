@@ -1,16 +1,26 @@
-# Credit Memo Builder
+# Non-Sports Loan Builder
 
-Generates credit memorandums for professional-athlete loans. Upload deal
-documents, Claude extracts the data, confirm the terms, and download the memo as
-HTML, PDF, or Word.
+Generates credit memorandums and closing packages for South River Capital's
+non-sports loans — business owners and executives, investment and real-estate
+borrowers, and general consumer or commercial borrowers. Upload deal documents,
+Claude extracts the data, confirm the terms, and download the memo as HTML, PDF
+or Word.
+
+Five tabs: Deal Structuring, Credit Memo, Participation Agreement, Loan
+Documents and Closing Binder.
 
 - **Backend:** Python + FastAPI (business logic, document extraction, rendering)
 - **Frontend:** Vue 3 + Vite
 
+This is a fork of the athlete-loan `credit-memo-builder` and runs alongside it,
+never on top of it: **backend :8001, frontend :5174** (the athlete builder keeps
+:8000 and :5173). `CLAUDE.md` documents what changed in the fork and what was
+deliberately kept.
+
 ## Why a backend
 
 The original version called the Anthropic API directly from the browser, which
-would expose an API key to anyone who opened the page. The backend keeps the key
+would expose a token to anyone who opened the page. The backend keeps it
 server-side in an environment variable. It's also where the underwriting math
 lives, with a test suite that locks in the rules.
 
@@ -22,19 +32,15 @@ You need Python 3.10+ and Node 18+.
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-cp ../.env.example ../.env                              # then edit ../.env and add your key
-export $(grep -v '^#' ../.env | xargs)                  # load env vars (or use a tool like direnv)
-uvicorn app.main:app --reload --port 8000
+python -m venv .venv && .venv\Scripts\python.exe -m pip install -e ".[dev]"
+copy ..\.env.example ..\.env      # then edit ..\.env and add your Claude usage token
+.venv\Scripts\python.exe run_local.py
 ```
 
-The API is now at http://localhost:8000, with interactive docs at
-http://localhost:8000/docs.
-
-> **PDF export** uses WeasyPrint, which needs system libraries (Pango/Cairo).
-> See `backend/README.md`. If you skip it, everything else works and the PDF
-> endpoint returns a clear message; you can still print to PDF from the browser.
+The app loads the project-root `.env` itself (python-dotenv), so no `--env-file`
+flag is needed. Extraction authenticates with a Claude **subscription usage**
+token (OAuth), never a pay-per-token API key — generate one with
+`claude setup-token` and put it in `.env` as `CLAUDE_CODE_OAUTH_TOKEN`.
 
 ### 2. Frontend
 
@@ -44,52 +50,23 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The dev server proxies `/api` to the backend, so no
-extra configuration is needed.
+Open **http://localhost:5174**. Vite proxies `/api` to the backend on :8001.
 
-### 3. Run the tests
+Or just double-click `Start Builder.bat`, which starts both.
 
-```bash
-cd backend && pytest
-```
-
-These verify the underwriting rules against the Alvarado reference deal. Run them
-before pushing.
-
-## Working with Claude Code
-
-This repo includes a `CLAUDE.md` that Claude Code reads automatically. It maps
-the codebase and lists the underwriting rules that must not regress. When asking
-Claude Code to make changes, point it at `CLAUDE.md` first; it will know to run
-`pytest` after touching the calculations.
-
-## Collaborating with coworkers
-
-1. **Use Git.** Initialize once (`git init`), then everyone clones the repo. See
-   the suggested workflow below.
-2. **Never commit secrets.** `.env` is git-ignored. Share keys out of band; each
-   person keeps their own `.env`.
-3. **Branch per change.** Create a branch (`git checkout -b fix-tax-rule`), make
-   the change, run `pytest`, open a pull request for review, merge.
-4. **Tests are the contract.** If you change a rule, change the matching test in
-   the same commit so reviewers see the intended behavior change explicitly.
-5. **The OpenAPI docs at `/docs`** are the source of truth for the API shape, so
-   frontend and backend developers can work in parallel.
-
-### Suggested Git workflow
+## Tests
 
 ```bash
-git init
-git add .
-git commit -m "Initial import of Credit Memo Builder"
-# create a repo on your host (GitHub/GitLab/etc.) and:
-git remote add origin <your-repo-url>
-git push -u origin main
+cd backend
+.venv\Scripts\python.exe -m pytest
 ```
 
-Then for each piece of work: branch → commit → push → pull request → review →
-merge. Keep `main` always passing `pytest`.
+`tests/test_calculations.py` locks in the underwriting rules. Run it before and
+after touching `calculations.py` or `memo.py`.
 
-## Project structure
+## Policy thresholds are placeholders
 
-See `CLAUDE.md` for a full map and the list of underwriting rules.
+`LTI_MAX_PCT` (50%), `LTV_MAX_PCT` (65%) and `DSCR_MIN` (1.25x) in
+`calculations.py` are ordinary commercial-credit starting points, **not South
+River policy**. Every memo coversheet prints a line saying so until the real
+numbers are set.

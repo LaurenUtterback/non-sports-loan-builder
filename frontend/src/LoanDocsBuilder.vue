@@ -76,7 +76,7 @@ const postLines = ref([])
 const sheetLoading = ref(false)
 const sheetStatus = reactive({ type: '', msg: '' })
 
-// Team & Contract document upload state (player contract, term sheet, ...)
+// Payor & Contract document upload state (the assigned contract, term sheet, ...)
 const contractFiles = ref([])
 const contractExtracting = ref(false)
 const contractStatus = reactive({ type: '', msg: '' })
@@ -133,14 +133,14 @@ function pullFromMemo() {
   // UCC-1 files a compound surname whole ("Rivas Delgado"), and the full name
   // alone never says where one begins.
   if (ed.borrower_surname) terms.borrower_surname = ed.borrower_surname
-  if (t.team && !terms.no_contracted_income) terms.payor_name = t.team
+  if (t.employer && !terms.no_contracted_income) terms.payor_name = t.employer
   if (t.payor_type) terms.payor_type = t.payor_type
   if (t.loan) terms.loan_amount = t.loan
   if (t.rate) terms.interest_rate = t.rate
   if (t.fee) terms.origination_fee_pct = t.fee
   if (t.fund) terms.closing_date = t.fund
   if (t.mat) terms.maturity_date = t.mat
-  if (t.sport) terms.occupation = `Professional ${titleCase(t.sport)} Player`
+  if (t.occupation) terms.occupation = titleCase(t.occupation)
 
   // Best-effort split of the memo's one-line address into the UCC-1 cells:
   // "street, city, ST zip" (leaves fields untouched when it doesn't parse).
@@ -220,7 +220,7 @@ async function readCreditMemo() {
       borrower_state: r.borrower_state,
       occupation: r.occupation,
       payor_name: terms.no_contracted_income ? '' : r.payor_name,
-      league: r.league,
+      payor_type: r.payor_type,
       loan_amount: r.loan_amount,
       interest_rate: r.interest_rate_pct,
       origination_fee_pct: r.origination_fee_pct,
@@ -243,10 +243,10 @@ async function readCreditMemo() {
   memoReading.value = false
 }
 
-// No contract with a Team / employer: the Contract / Borrower's Employer
+// No contracted income: the Contract / Borrower's Employer
 // definitions and the Payment Direction Letter's addressee switch to "the
-// team that signs the Borrower in the upcoming <year> <league>" language, so
-// the League and season year are still needed. Prefill the year from the
+// party that becomes obligated for the upcoming <period> <payor type>"
+// language, so the payor type and period are still needed. Prefill from the
 // closing date when it's blank.
 function onNoContractToggle() {
   if (terms.no_contracted_income && !terms.payment_period_label && terms.closing_date) {
@@ -255,7 +255,7 @@ function onNoContractToggle() {
   ready.value = false
 }
 
-// --- Team & Contract document upload -------------------------------------------
+// --- Payor & Contract document upload -------------------------------------------
 function onContractFiles(e) {
   // accumulate like the Credit Memo tab, deduped by name+size
   const seen = new Set(contractFiles.value.map((f) => f.name + ':' + f.size))
@@ -289,13 +289,13 @@ async function extractContract() {
     if (r.payor_name) terms.payor_name = r.payor_name
     if (r.payor_street) terms.payor_street = r.payor_street
     if (r.payor_city_state_zip) terms.payor_city_state_zip = r.payor_city_state_zip
-    if (r.league) terms.league = r.league
+    if (r.payor_type) terms.payor_type = r.payor_type
     if (r.contract_title) terms.contract_title = r.contract_title
     if (r.contract_date) terms.contract_date = toISODate(r.contract_date)
-    // the player is deal-level info — fill only if still blank
+    // the borrower is deal-level info — fill only if still blank
     if (r.borrower_name && !terms.borrower_name) terms.borrower_name = r.borrower_name
     if (r.borrower_surname && !terms.borrower_surname) terms.borrower_surname = r.borrower_surname
-    const got = ['payor_name', 'payor_street', 'payor_city_state_zip', 'league',
+    const got = ['payor_name', 'payor_street', 'payor_city_state_zip', 'payor_type',
                  'contract_title', 'contract_date'].filter((k) => r[k]).length
     contractStatus.type = got ? 'ok' : 'err'
     contractStatus.msg = got
@@ -466,7 +466,7 @@ async function exportWord() {
       <div class="grid">
         <label>Borrower name <input v-model="terms.borrower_name" /></label>
         <label>Surname only (UCC-1) <input v-model="terms.borrower_surname" placeholder="e.g. Rivas Delgado" /></label>
-        <label>Occupation <input v-model="terms.occupation" placeholder="Professional Baseball Player" /></label>
+        <label>Occupation <input v-model="terms.occupation" placeholder="Owner, Northgate Mechanical LLC" /></label>
         <label>Street address <input v-model="terms.borrower_street" /></label>
         <label>City <input v-model="terms.borrower_city" /></label>
         <label>State (abbrev.) <input v-model="terms.borrower_state_abbr" placeholder="FL" /></label>
@@ -503,14 +503,14 @@ async function exportWord() {
         <label>Default rate (points above note rate) <input v-model.number="terms.default_rate_points" type="number" step="0.5" /></label>
       </div>
 
-      <h3 class="grp">Team &amp; contract</h3>
+      <h3 class="grp">Payor &amp; assigned contract</h3>
       <label class="chk" style="margin:2px 0 8px">
         <input type="checkbox" v-model="terms.no_contracted_income" @change="onNoContractToggle" />
-        Athlete does not have a contract with a Team / Employer
+        No contract is being assigned (unsecured — personal guarantee only)
       </label>
-      <p v-if="terms.no_contracted_income" class="hint">The cover page will show “None” for Team / Employer and Contract, and the Contract / Borrower’s Employer definitions and the Payment Direction Letter switch to “the team that signs the Borrower in the upcoming season” language — set the League and the season year below.</p>
+      <p v-if="terms.no_contracted_income" class="hint">The cover page will show “None” for Payor / Employer and Contract, and the Contract / Borrower’s Employer definitions and the Payment Direction Letter switch to “the party that becomes obligated to pay the Borrower for the upcoming period” language — set the payor type and the period below.</p>
       <template v-if="!terms.no_contracted_income">
-        <p class="hint">Upload the player's contract (or other deal documents) and Claude fills the team, address, league, and contract details below.</p>
+        <p class="hint">Upload the agreement being assigned — a lease, an employment or services contract — and Claude fills the payor, its notice address, and the contract details below. Many deals assign nothing: tick the box above instead.</p>
         <input type="file" multiple @change="onContractFiles" :disabled="contractExtracting" />
         <ul v-if="contractFiles.length" class="filelist">
           <li v-for="(f, i) in contractFiles" :key="f.name + f.size">
@@ -519,17 +519,17 @@ async function exportWord() {
           </li>
         </ul>
         <button type="button" :disabled="!contractFiles.length || contractExtracting" @click="extractContract">
-          {{ contractExtracting ? 'Analyzing…' : 'Extract team & contract with Claude' }}
+          {{ contractExtracting ? 'Analyzing…' : 'Extract payor & contract with Claude' }}
         </button>
         <p v-if="contractStatus.msg" :class="['status', contractStatus.type]">{{ contractStatus.msg }}</p>
       </template>
       <div class="grid">
-        <label>Team / Employer <input v-model="terms.payor_name" :disabled="terms.no_contracted_income" /></label>
-        <label>League <input v-model="terms.league" placeholder="MLB" /></label>
-        <label v-if="terms.no_contracted_income">Upcoming season year <input v-model="terms.payment_period_label" placeholder="2026" /></label>
-        <label>Team street address <input v-model="terms.payor_street" :disabled="terms.no_contracted_income" /></label>
-        <label>Team city / state / zip <input v-model="terms.payor_city_state_zip" :disabled="terms.no_contracted_income" /></label>
-        <label>Contract title <input v-model="terms.contract_title" :placeholder="(terms.league || 'MLB') + ' Professional Contract'" :disabled="terms.no_contracted_income" /></label>
+        <label>Payor / Employer <input v-model="terms.payor_name" :disabled="terms.no_contracted_income" /></label>
+        <label>Payor type <input v-model="terms.payor_type" placeholder="employer / tenant / customer" /></label>
+        <label v-if="terms.no_contracted_income">Upcoming period <input v-model="terms.payment_period_label" placeholder="2027 fiscal year" /></label>
+        <label>Payor street address <input v-model="terms.payor_street" :disabled="terms.no_contracted_income" /></label>
+        <label>Payor city / state / zip <input v-model="terms.payor_city_state_zip" :disabled="terms.no_contracted_income" /></label>
+        <label>Contract title <input v-model="terms.contract_title" placeholder="Commercial Lease Agreement" :disabled="terms.no_contracted_income" /></label>
         <label>Contract date <input v-model="terms.contract_date" type="date" :disabled="terms.no_contracted_income" /></label>
         <label>Lender signatory title <input v-model="terms.lender_signatory_title" /></label>
       </div>
