@@ -215,6 +215,29 @@ class StructureExtraction(_Tolerant):
             return "monthly"
         return None
 
+    @field_validator("income_horizon", "funding_date", "maturity_date",
+                     "expected_exit_date", mode="before")
+    @classmethod
+    def _only_real_dates(cls, v):
+        """Keep a date only if it looks like one; drop anything else.
+
+        These fields reach the UI's date pickers. A model that answers the
+        income horizon with 12 (reading "horizon" as a number of months - the
+        field was `contract_end` in the athlete builder, where the name itself
+        said date) would otherwise fail validation and lose the ENTIRE
+        extraction, including every figure it got right. Dropping one unusable
+        value costs the user one field; refusing the reply costs them the
+        upload.
+        """
+        if v is None or isinstance(v, bool):
+            return None
+        if isinstance(v, (int, float)):
+            return None
+        text = str(v).strip()
+        if not text or text.lower() in ("null", "none", "n/a", "na", "tbd"):
+            return None
+        return text if re.match(r"^\d{4}-\d{2}-\d{2}", text) else None
+
     @field_validator("income_contracted", mode="before")
     @classmethod
     def _normalize_guaranteed(cls, v):
@@ -274,7 +297,15 @@ RULES — these are load-bearing:
    use the MOST RECENT COMPLETE YEAR as filed - never an average, never the
    best year - and say the prior year and the trend in notes.
 
-2. INCOME_CONTRACTED is TRUE only when a named payor is CONTRACTUALLY OBLIGED
+2. OTHER_INCOME is income the borrower receives that you did NOT already count
+   in qualifying_income - and nothing else. The projection adds the two
+   together, so any component repeated in both inflates the borrower's gross
+   income and overstates how much loan the cash flow can carry. If every
+   source you found is already inside qualifying_income, return 0. Never
+   restate the rental, business or salary figure here because it is "also"
+   other income.
+
+3. INCOME_CONTRACTED is TRUE only when a named payor is CONTRACTUALLY OBLIGED
    to pay the income through the facility's maturity - signed leases running
    past maturity, an employment agreement's guaranteed (non-discretionary)
    pay, a contracted management or service fee. It is FALSE for at-will
@@ -284,7 +315,7 @@ RULES — these are load-bearing:
    condition in income_commitment_note. This flips which structures make
    sense, so do not round it up to true.
 
-3. INCOME_EVENTS are dated lump receipts that fall OUTSIDE the regular income
+4. INCOME_EVENTS are dated lump receipts that fall OUTSIDE the regular income
    cadence: quarterly or annual owner distributions, an annual bonus, a
    milestone or progress billing, a lease-up payment, a maturing note
    receivable, expected sale or refinance proceeds. Give each its real expected
@@ -292,9 +323,21 @@ RULES — these are load-bearing:
    qualifying_income - if quarterly distributions make up the annual figure,
    either spread them through qualifying_income or list them here, not both.
    Mark guaranteed=false for anything contingent (a sale not yet under
-   contract, a bonus not yet declared).
+   contract, a bonus not yet declared). EVERY event must be a receipt the
+   borrower expects IN THE FUTURE, on a real expected date you can name. A
+   historical figure from a filed tax return is NOT an income event - a
+   capital gain realised last year, a bonus already paid, a sale already
+   closed. Those have been received and spent; projecting them forward invents
+   cash the borrower will never see again. If you cannot name the date a
+   receipt is expected, leave the event out and say so in notes.
 
-4. TIMING: pay_frequency is "weekly", "semimonthly" or "monthly" - only if the
+5. INCOME_HORIZON is a DATE, never a duration: the ISO yyyy-mm-dd date on
+   which the borrower's documented income runs out - the earliest lease expiry
+   or agreement end the facility depends on, not the latest. It is NOT a
+   number of months and NOT the loan's term. Return null when the income has
+   no documented end date.
+
+6. TIMING: pay_frequency is "weekly", "semimonthly" or "monthly" - only if the
    documents actually state how the borrower is paid. season_start /
    season_end are the first and last months of the borrower's INCOME-ACTIVE
    WINDOW in ISO form, for a business that earns seasonally (construction,
@@ -306,7 +349,7 @@ RULES — these are load-bearing:
    word where the documents support one: PAYROLL, DISTRIBUTIONS, RENTS,
    SEASONAL or PROJECT. "industry" is the borrower's industry in a few words.
 
-5. PFS: when a Personal Financial Statement is among the documents, fill "pfs"
+7. PFS: when a Personal Financial Statement is among the documents, fill "pfs"
    with the SAME fields the credit-memo extraction captures (else "pfs": null):
    * pfs_date is the date the PFS was PREPARED (a "Completed on:" line, a date
      printed on page 1, or the signature date), ISO yyyy-mm-dd. Never the
@@ -343,7 +386,7 @@ RULES — these are load-bearing:
    no usable lines; the server recomputes debt service from "pfs" the way the
    credit memo does, stale-statement roll-forward included.
 
-6. EXIT: fill expected_exit_date / expected_exit_label ONLY when the documents
+8. EXIT: fill expected_exit_date / expected_exit_label ONLY when the documents
    indicate repayment depends on a specific EVENT rather than on income — a
    property sale, a refinance commitment, a business sale or recapitalization,
    a contract award being signed, a note receivable maturing. expected_exit_label is a SHORT NOUN PHRASE
@@ -352,22 +395,22 @@ RULES — these are load-bearing:
    belongs in notes. Set the label even if no date is stated. If repayment
    simply comes from the borrower's income, leave both null.
 
-7. presented_type is how the loan is structured AS PRESENTED, in the documents'
+9. presented_type is how the loan is structured AS PRESENTED, in the documents'
    own words ("Full balloon", "Interest only with balloon", "Fully amortized").
 
-8. Dates are ISO yyyy-mm-dd. Amounts are plain numbers, no symbols or commas.
+10. Dates are ISO yyyy-mm-dd. Amounts are plain numbers, no symbols or commas.
    Percentages are numbers (15 for 15%). Use null for anything the documents do
    not state — NEVER guess, and never carry a figure over from a different
    season or a different loan.
 
-9. NOTES is read by a person in a single glance. Give at most 5 short items,
+11. NOTES is read by a person in a single glance. Give at most 5 short items,
    semicolon-separated, covering only what would change the structuring
    decision or what you were unsure about — a conflict between documents, a
    figure you had to interpret, a repayment source that is not the income.
    Do not restate figures that are already in the fields above, and do not
    summarize the deal.
 
-10. BORROWER_NAME. """ + LEGAL_NAME_RULE + """
+12. BORROWER_NAME. """ + LEGAL_NAME_RULE + """
 """
 
 

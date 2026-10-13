@@ -362,6 +362,32 @@ def test_pay_frequency_normalizes_onto_the_supported_cadences():
         assert IncomeCadence(pay_frequency=v).pay_frequency == v
 
 
+def test_a_bad_date_drops_that_field_instead_of_losing_the_extraction():
+    """One unusable value must never cost the user the whole upload.
+
+    Seen for real: asked for income_horizon the model answered 12, reading
+    "horizon" as a number of months. (The athlete builder called this field
+    contract_end, where the name itself said date.) That 422'd the entire
+    extraction - every figure it got right went down with it. Now the field is
+    dropped and the rest survives; the prompt also states it is a date.
+    """
+    ex = StructureExtraction(qualifying_income=1_140_000, income_horizon=12)
+    assert ex.income_horizon is None
+    assert ex.qualifying_income == 1_140_000      # the rest is kept
+
+    for junk in ("not stated", "N/A", "", "12 months", "next year", 2029, None):
+        assert StructureExtraction(income_horizon=junk).income_horizon is None
+    for good in ("2029-12-31", "2026-02-28"):
+        assert StructureExtraction(income_horizon=good).income_horizon == good
+
+
+def test_every_date_field_is_equally_tolerant():
+    ex = StructureExtraction(funding_date=6, maturity_date="TBD",
+                             expected_exit_date="2027-03-15")
+    assert ex.funding_date is None and ex.maturity_date is None
+    assert ex.expected_exit_date == "2027-03-15"
+
+
 def test_guarantee_accepts_yes_no_strings():
     assert StructureExtraction(income_contracted="Yes").income_contracted is True
     assert StructureExtraction(income_contracted="conditional").income_contracted is False
