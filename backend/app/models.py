@@ -42,6 +42,42 @@ class UsesOfFunds(BaseModel):
     additional_costs: list[DisbursementItem] = Field(default_factory=list)
 
 
+class FinancialYear(BaseModel):
+    """One column of the Financial Analysis table.
+
+    McCormick's runs FY2023 / FY2024 / FY2025 / YTD 2026 against Revenue,
+    EBITDA and Net Income, with the proposed debt service and DSCR computed
+    beneath. ``period`` is the column heading exactly as the documents label
+    it, so a YTD or stub period is not silently presented as a full year.
+    """
+    period: str = ""                  # "FY2024", "YTD 2026", "TTM 6/30/26"
+    revenue: Optional[float] = None
+    ebitda: Optional[float] = None
+    net_income: Optional[float] = None
+
+
+class RiskItem(BaseModel):
+    """One Risk Considerations & Mitigants pair.
+
+    Both examples write these as risk-then-mitigant rather than as a FAQ, and
+    an unmitigated risk is still worth stating - ``mitigant`` may be empty, and
+    the memo then prints the risk with the mitigant line marked outstanding
+    rather than dropping the risk.
+    """
+    risk: str = ""                    # short label: "Dated appraisal"
+    detail: str = ""                  # what the exposure actually is
+    mitigant: str = ""                # what answers it; "" = none yet
+
+
+class CollateralCoverageRow(BaseModel):
+    """One line of the Collateral Coverage table - a value and the LTV it
+    implies. McCormick stresses the 2021 income approach at 7.0% and 7.5% cap
+    rates alongside the appraisal and a live sale-leaseback offer, so the
+    reader sees the LTV under each, not just the flattering one."""
+    basis: str = ""                   # "2021 MAI appraisal (Valbridge)"
+    value: float = 0.0
+
+
 class RepaymentRow(BaseModel):
     """One scheduled payment in the loan's repayment/amortization schedule.
 
@@ -193,6 +229,37 @@ class Extraction(BaseModel):
     # gross-loan/origination-fee table built from the deal terms).
     uses_of_funds: Optional[UsesOfFunds] = None
 
+    # --- the memo's own sections (see memo.html.j2) ------------------------
+    # A one-line deal headline, the way both examples title the memo:
+    # "$4M First Lien Loan - McCormick Paints, Frederick, MD".
+    headline: Optional[str] = None
+    # "Commercial Real Estate", "Operating business", "Residential investment".
+    asset_class: Optional[str] = None
+    # Why the borrower wants the money, in a few words.
+    purpose: Optional[str] = None
+    # The Executive Summary: what is being asked for, on what terms, what
+    # secures it, and what the credit actually rests on.
+    exec_summary: Optional[str] = None
+    # Loan Summary rows that are not already deal terms.
+    property_owner: Optional[str] = None     # grantor / titled owner, if not the borrower
+    guarantors: Optional[str] = None         # "None personal", or who guarantees
+    prepayment: Optional[str] = None
+    key_conditions: Optional[str] = None
+    # Collateral Analysis narrative, and the coverage table's bases.
+    collateral_notes: Optional[str] = None
+    collateral_coverage: list[CollateralCoverageRow] = Field(default_factory=list)
+    # Financial Analysis: one entry per reporting period, oldest first.
+    financials: list[FinancialYear] = Field(default_factory=list)
+    financial_notes: Optional[str] = None
+    # Risk Considerations & Mitigants.
+    risks: list[RiskItem] = Field(default_factory=list)
+    # Required Documents - what must be in hand before closing.
+    required_documents: list[str] = Field(default_factory=list)
+    # The three repayment sources, in the examples' own order.
+    repay_primary: Optional[str] = None
+    repay_secondary: Optional[str] = None
+    repay_tertiary: Optional[str] = None
+
     credit_notes: Optional[str] = None
     # Section VII's narrative on how the income was documented and composed
     # (the athlete builder's contract_notes).
@@ -234,6 +301,28 @@ class DealTerms(BaseModel):
     fund: Optional[date] = None       # funding date
     mat: Optional[date] = None        # maturity date
     loan_type: str = "New Loan"
+
+    # --- the memo's framing (both examples lead with these) ----------------
+    headline: str = ""                # blank -> composed from the terms
+    asset_class: str = ""             # "Commercial Real Estate", ...
+    purpose: str = ""                 # "Refinance / pay off existing bank loan"
+    property_owner: str = ""          # titled owner, when not the borrower
+    guarantors: str = ""              # blank -> "None personal" when unsecured
+    prepayment: str = ""
+    key_conditions: str = ""
+
+    # How the facility pays. "io" = interest only with the principal due at
+    # maturity (McCormick); "amortizing" = level payments retiring the
+    # principal over the term (the Walgreens/Bouye template). This drives both
+    # the Repayment Schedule and the Payments row of the Loan Summary.
+    amortization: str = "io"
+
+    # INVESTOR economics, which are NOT always what the borrower pays: on the
+    # Walgreens deal the borrower paid 12% and 5 points while investors
+    # received 10% and 1 point. Blank falls back to the borrower's rate/fee.
+    investor_rate: float = 0.0
+    investor_points: float = 0.0
+    show_investor_returns: bool = True
     # Which of the three non-sports borrower profiles this deal is, which swaps
     # the memo's risk FAQ, repayment sources and purpose language (rule 20).
     # Set only by the underwriter, never by extraction.

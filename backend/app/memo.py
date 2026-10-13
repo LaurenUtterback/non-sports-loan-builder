@@ -38,6 +38,13 @@ _env = Environment(
 _PDF_HEADER_TEMPLATE = "<div></div>"
 _DEFAULT_FOOTER_TEXT = "South River Capital — Credit Memorandum"
 
+# Neither of Lauren's example memos carries the Deal Summary & Policy
+# Compliance checklist: both lead with the deal and close with a
+# recommendation and signature lines. Rather than delete the checklist, it
+# moves to a final APPENDIX page - the memo reads like the examples, and the
+# compliance view survives for the file. Set this False to drop it entirely.
+_SHOW_COMPLIANCE = True
+
 
 def _pdf_footer_template(footer_text: str, page_numbers: bool = True) -> str:
     label = footer_text.replace("—", "&mdash;")
@@ -66,6 +73,25 @@ def _money(n) -> str:
     if n == 0:
         return "$0"
     return "$" + f"{abs(round(n)):,}"
+
+
+def _money2(n) -> str:
+    """A figure WITH cents: "$36,666.67".
+
+    Lauren's examples print cents wherever a payment is stated - McCormick's
+    $36,666.67 monthly interest and $916.67 per $100,000, the Bouye template's
+    $88,785.95 instalment. A memo that rounds a payment to the dollar disagrees
+    with the note the borrower signs, so payments, the repayment schedule and
+    investor returns all use this; headline amounts and the Financial Analysis
+    stay on whole dollars, as the examples have them.
+    """
+    if n is None:
+        return "\u2014"
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return "\u2014"
+    return "$" + f"{n:,.2f}"
 
 
 def _signed(n) -> str:
@@ -423,16 +449,113 @@ def _exceptions_html(comp: dict) -> str:
     )
 
 
+def _money_or_tbd(v) -> str:
+    """A figure, or the examples' own bracketed placeholder when it is absent.
+
+    McCormick prints "[TBD]" in its Financial Analysis rather than leaving the
+    cell blank or inventing a number, which is the honest presentation: the
+    reader can see the question was asked and not yet answered.
+    """
+    return _money(v) if v is not None else "[TBD]"
+
+
+def _risk_rows(ed: Extraction | None, *, has_collateral: bool, is_io: bool,
+               has_insurance_policy: bool, profile: str) -> list[dict]:
+    """The Risk Considerations & Mitigants pairs.
+
+    The documents' own risks win. With none captured, the structural risks this
+    facility carries are stated from the deal's own shape - an interest-only
+    balloon has refinancing risk whether or not anyone wrote it down.
+    """
+    captured = [
+        {"risk": r.risk or "Risk", "detail": r.detail or "",
+         "mitigant": r.mitigant or ""}
+        for r in (ed.risks if ed else []) or [] if (r.risk or r.detail)
+    ]
+    if captured:
+        return captured
+
+    out: list[dict] = []
+    if is_io:
+        out.append({
+            "risk": "Interest only / refinance risk",
+            "detail": "No principal amortizes, so the full balance is due at maturity.",
+            "mitigant": ("Exit is a refinance or sale of the pledged collateral, "
+                         "with the equity cushion shown in Collateral Coverage above."
+                         if has_collateral else
+                         "Repayment depends on a refinance or on the Borrower's own "
+                         "liquidity; there is no collateral to sell."),
+        })
+    if not has_collateral:
+        out.append({
+            "risk": "Unsecured",
+            "detail": "No specific asset is pledged; recourse is to the Borrower personally.",
+            "mitigant": ("Full personal guarantee with confession of judgment, and a "
+                         "UCC-1 filing against the Borrower's business assets."),
+        })
+    if profile == "business":
+        out.append({
+            "risk": "Customer concentration and earnings volatility",
+            "detail": ("Owner income moves with the business, and a closely held "
+                       "business's revenue is often concentrated in few customers."),
+            "mitigant": ("Underwritten against the most recent complete filed year "
+                         "rather than projections; the personal guarantee reaches "
+                         "assets outside the business."),
+        })
+        out.append({
+            "risk": "Key-person risk",
+            "detail": "The income underwritten depends on the Borrower's continued involvement.",
+            "mitigant": ("Life / disability insurance assigned to Lender."
+                         if has_insurance_policy else
+                         "No policy is assigned; the guarantee and the Borrower's "
+                         "estate are the support."),
+        })
+    elif profile == "investment":
+        out.append({
+            "risk": "Vacancy and tenant default",
+            "detail": "Rental income stops if tenants leave or stop paying.",
+            "mitigant": ("Income is underwritten NET of operating costs, taxes, "
+                         "insurance and existing mortgage debt service; leases and "
+                         "the rent roll are confirmed at underwriting."),
+        })
+        out.append({
+            "risk": "Valuation",
+            "detail": "A decline in collateral value erodes the Lender's cushion.",
+            "mitigant": ("A third-party valuation is a condition of closing, and the "
+                         "coverage table above shows the LTV under stressed values."),
+        })
+    else:
+        out.append({
+            "risk": "Income interruption",
+            "detail": "The facility is carried by personal income, which can stop.",
+            "mitigant": ("Income is documented from returns, W-2s and pay stubs "
+                         "rather than projected; liquid assets on the PFS are the "
+                         "first support."),
+        })
+    out.append({
+        "risk": "Additional leverage",
+        "detail": "New borrowing would rank against the same cash flow.",
+        "mitigant": ("Lender holds a first right of refusal on all additional debt; "
+                     "failure to comply is an event of default, and credit is pulled "
+                     "periodically."),
+    })
+    return out
+
+
 def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | None = None) -> str:
-    """Render the full credit memo as an HTML string."""
+    """Render the full credit memo as an HTML string.
+
+    The section order follows Lauren's two example memos (McCormick Paints and
+    the Walgreens/Bouye template) rather than the athlete builder's numbered
+    Sections I-XII. See memo.html.j2.
+    """
     filenames = filenames or []
-    # Confirmed deal terms win; otherwise fall back to what was pulled from the
-    # documents, so the memo reflects the term sheet.
     loan = terms.loan or (ed.loan_amount if ed else 0) or 0
     rate = terms.rate or (ed.interest_rate_pct if ed else 0) or 0
     fee = terms.fee or (ed.origination_fee_pct if ed else 0) or 0
     income = terms.income or (ed.qualifying_income if ed else 0) or 0
     profile = calc.normalize_profile(terms.profile)
+    is_io = (terms.amortization or "io") != "amortizing"
 
     amort = None
     if terms.fund and terms.mat and loan and rate:
@@ -441,17 +564,11 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
     cf = calc.build_cash_flow(ed, amort, loan, income)
     facility_due = calc.facility_total(ed, amort, loan)
 
-    # The LTI basis, resolved exactly as the athlete builder resolved the LTC
-    # basis (rule 10): the income COMMITTED by contract or lease over the
-    # facility's term when the deal has any, else the annual qualifying
-    # income. Confirmed terms win over the documents either way.
     contracted_income = (terms.contracted_income
                          or (ed.contracted_income if ed else 0) or 0)
     income_basis = contracted_income or income
     lti = calc.calc_lti(loan, income_basis)
 
-    # LTV against the pledged collateral. Blank/0 means an unsecured facility,
-    # which the coversheet reports as N/A - never as a passing 0%.
     collateral_value = (terms.collateral_value
                         or (ed.collateral_value if ed else 0) or 0)
     collateral_desc = (terms.collateral_desc
@@ -460,37 +577,25 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
     dscr = calc.calc_dscr(cf)
 
     uof = calc.calc_uses_of_funds(ed.uses_of_funds if ed else None, loan, fee)
-    # Rule 19: the memo claims a life/disability policy ONLY when the
-    # documents' own disbursement carries the premium line. When it doesn't,
-    # every mention drops out - coversheet row/collateral, mitigants, both
-    # Tertiary repayment-source cards, the Section II bullet and Section III's
-    # repayment cell.
     has_ins = calc.has_insurance(ed.uses_of_funds if ed else None)
 
-    # Deal Summary & Policy Compliance coversheet (page 1). Runs on the same
-    # LTI / LTV / DSCR / cash flow figures the memo body reports, so the
-    # checklist can never disagree with the sections behind it.
-    credit_text = _credit_text(ed, date.today())
-    compliance = calc.calc_policy_compliance(
-        lti=lti, ltv=ltv, dscr=dscr, cf=cf, mat_fmt=_fmt_long(terms.mat),
-        has_maturity=bool(terms.mat), has_collateral=bool(collateral_value),
-        has_insurance_policy=has_ins,
-    )
+    months = calc.loan_term_months(ed, amort)
 
-    amort_for_tpl = amort or {"rows": [], "interest": 0, "balloon": 0, "months": 0}
-
-    # Section X repayment schedule: prefer the schedule captured from the uploaded
-    # documents; otherwise compute one (interest paid monthly, principal balloon)
-    # from the deal terms. Empty when neither is available -> placeholder row.
+    # --- repayment schedule ------------------------------------------------
+    # The documents' own schedule wins. Otherwise it is computed from the
+    # terms, on the convention the facility actually uses: interest-only pays
+    # rate/12 monthly with the principal at maturity (McCormick), an
+    # amortizing facility pays a level actual/360 instalment (the Bouye
+    # template). A long interest-only schedule is banded by year, the way
+    # McCormick presents its 36 months as three rows plus a total.
+    rep_rows: list[dict] = []
+    rep_totals: dict = {}
+    bands: list[dict] = []
     if ed and ed.repayment_schedule:
         rep_rows = [
-            {
-                "num": i + 1,
-                "date": r.date or "\u2014",
-                "interest": r.interest,
-                "principal": r.principal,
-                "total": r.total or (r.interest + r.principal),
-            }
+            {"num": i + 1, "date": r.date or "\u2014", "interest": r.interest,
+             "principal": r.principal,
+             "total": r.total or (r.interest + r.principal)}
             for i, r in enumerate(ed.repayment_schedule)
         ]
         rep_totals = {
@@ -499,78 +604,231 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
             "total_payment": sum(r["total"] for r in rep_rows),
         }
     elif terms.fund and terms.mat and loan and rate:
-        rep_sched = calc.calc_repayment_schedule(loan, rate, terms.fund, terms.mat)
-        rep_rows = rep_sched["rows"]
-        rep_totals = rep_sched
-    else:
-        rep_rows, rep_totals = [], {}
+        sched = (calc.calc_repayment_schedule(loan, rate, terms.fund, terms.mat)
+                 if is_io else
+                 calc.calc_amortizing_schedule(loan, rate, terms.fund, terms.mat))
+        rep_rows, rep_totals = sched["rows"], sched
+        if len(rep_rows) > 14:
+            bands = calc.annualize_schedule(rep_rows, terms.fund)
+
+    band_ctx = [{"label": b["label"],
+                 "interest_money": _money2(b["interest"]),
+                 "principal_money": _money2(b["principal"]),
+                 "total_money": _money2(b["total"])} for b in bands]
+    totals_ctx = {
+        "interest_money": _money2(rep_totals.get("total_interest", 0)),
+        "principal_money": _money2(rep_totals.get("total_principal", 0)),
+        "total_money": _money2(rep_totals.get("total_payment", 0)),
+    }
+
+    monthly_payment = 0.0
+    if rep_rows:
+        monthly_payment = (rep_totals.get("level_payment")
+                           or rep_rows[0].get("interest") or 0)
+
+    # --- financial analysis -------------------------------------------------
+    sched_for_ds = rep_totals if not is_io else None
+    debt_service = calc.annual_debt_service(loan, rate, terms.amortization or "io",
+                                            sched_for_ds)
+    fin = calc.calc_financial_analysis(ed.financials if ed else None, debt_service)
+    fin_ctx = {
+        "periods": [{
+            "period": p["period"] or "[period]",
+            "revenue_money": _money_or_tbd(p["revenue"]),
+            "ebitda_money": _money_or_tbd(p["ebitda"]),
+            "net_income_money": _money_or_tbd(p["net_income"]),
+            "debt_service_money": _money(p["debt_service"]),
+            "dscr_fmt": f'{p["dscr"]:.2f}x' if p["dscr"] is not None else "[TBD]",
+        } for p in fin["periods"]],
+        "breakeven": [{"label": b["label"], "money": _money(b["ebitda"])}
+                      for b in fin["breakeven"]],
+    }
+
+    # --- collateral coverage ------------------------------------------------
+    cov_rows = list((ed.collateral_coverage if ed else []) or [])
+    if not cov_rows and collateral_value:
+        from .models import CollateralCoverageRow
+        cov_rows = [CollateralCoverageRow(
+            basis=(ed.collateral_desc if ed and ed.collateral_desc
+                   else "Valuation on file"), value=collateral_value)]
+    coverage = calc.calc_collateral_coverage(cov_rows, loan, collateral_value)
+    coverage_ctx = {
+        "rows": [{"basis": r["basis"], "value_money": _money(r["value"]),
+                  "ltv": f'{r["ltv"]:.1f}' if r["ltv"] is not None else ""}
+                 for r in coverage["rows"]],
+        "equity_money": (_money(coverage["equity_cushion"])
+                         if coverage["equity_cushion"] else ""),
+    }
+
+    # --- investor returns ---------------------------------------------------
+    inv_rate = terms.investor_rate or rate
+    inv_points = terms.investor_points or fee
+    inv = calc.calc_investor_returns(loan, inv_rate, inv_points, months)
+
+    def _inv_block(b):
+        return {"points_money": _money2(b["points"]), "monthly_money": _money2(b["monthly"]),
+                "annual_money": _money2(b["annual"]), "total_money": _money2(b["total"])}
+
+    investor_ctx = {
+        "rate": _fmt_pct(inv_rate), "points": _fmt_pct(inv_points),
+        "unit_money": _money(inv["unit"]),
+        "per_unit": _inv_block(inv["per_unit"]), "full": _inv_block(inv["full"]),
+    }
+
+    # --- narratives ---------------------------------------------------------
+    has_pfs = bool(ed and (ed.total_assets or ed.assets or ed.liabilities))
+    credit_text = _credit_text(ed, date.today())
+    compliance = calc.calc_policy_compliance(
+        lti=lti, ltv=ltv, dscr=dscr, cf=cf, mat_fmt=_fmt_long(terms.mat),
+        has_maturity=bool(terms.mat), has_collateral=bool(collateral_value),
+        has_insurance_policy=has_ins,
+    )
+
+    name = terms.name or "[Borrower Name]"
+    employer = terms.employer or (ed.employer if ed else "") or ""
+    asset_class = terms.asset_class or (ed.asset_class if ed else "") or ""
+    purpose = terms.purpose or (ed.purpose if ed else "") or ""
+
+    headline = terms.headline or (ed.headline if ed else "") or (
+        f"{_money(loan)} {'First Lien ' if collateral_value else ''}"
+        f"{'Interest-Only ' if is_io else ''}Loan \u2014 {name}"
+        + (f", {employer}" if employer else ""))
 
     collateral_cell = collateral_desc or (
         "Pledged collateral" if collateral_value
-        else "Unsecured \u2014 personal guarantee")
+        else "Unsecured \u2014 personal guarantee; UCC-1 on business assets")
+
+    payments_desc = (
+        f"Interest only, {_money2(monthly_payment)} per month; principal due at maturity"
+        if is_io else
+        f"Level payments of {_money2(monthly_payment)} per month, fully amortizing")
+
+    exec_summary = (ed.exec_summary if ed and ed.exec_summary else
+                    f"{name} is seeking a {_money(loan)} loan"
+                    + (f" to {purpose.lower()}" if purpose else "")
+                    + f". The facility has a {months}-month term at {_fmt_pct(rate)}%"
+                    + (f" with {_fmt_pct(fee)} point(s)" if fee else "")
+                    + (", interest only, with the full principal due at maturity."
+                       if is_io else ", fully amortizing over the term.")
+                    + (f" It is secured by {collateral_desc or 'the pledged collateral'}, "
+                       f"valued at {_money(collateral_value)}, a {ltv:.1f}% loan-to-value."
+                       if collateral_value else
+                       " It is unsecured, resting on the Borrower's personal guarantee.")
+                    + (f" Documented qualifying income is {_money(income)}."
+                       if income else
+                       " [No qualifying income figure was captured \u2014 enter it before"
+                       " circulating this memo.]"))
+
+    recommendation = (
+        f"Approve a {_money(loan)}, {months}-month"
+        + (", interest-only" if is_io else ", fully amortizing")
+        + f" loan at {_fmt_pct(rate)}%"
+        + (f" and {_fmt_pct(fee)} point(s)" if fee else "")
+        + f" to {name}"
+        + (f", secured by {collateral_desc or 'the pledged collateral'}"
+           f" ({ltv:.1f}% LTV on {_money(collateral_value)})" if collateral_value else
+           ", on an unsecured basis supported by the personal guarantee")
+        + ". Approval is subject to the required documents above"
+        + (f", in particular {terms.key_conditions}" if terms.key_conditions else "")
+        + ".")
 
     context = {
+        # 7 fixed pages (title/exec, loan summary, collateral+borrower,
+        # financials, risks+repayment sources, sources+schedule,
+        # investor+documents+recommendation), plus the two conditional ones.
+        "page_count": 7 + (1 if has_pfs else 0) + (1 if _SHOW_COMPLIANCE else 0),
         "logo": _LOGO_PATH.read_text().strip(),
-        "name": terms.name or "[Borrower Name]",
-        "employer": terms.employer or "[Business / Employer]",
-        "industry": terms.industry or "[Industry]",
-        "occupation": terms.occupation or "[Role / Title]",
-        "addr": terms.addr or "[Address]",
-        "phone": terms.phone or "[Phone]",
-        "dob": terms.dob or "[DOB]",
-        "ssn": calc.mask_ssn(terms.ssn) or "[XXX-XX-####]",
-        "dl": terms.dl or "[DL#]",
-        "advisor": terms.advisor or "",
+        "tbd": "[TBD]",
+        "name": name,
+        "headline": headline,
+        "asset_class": asset_class,
+        "purpose": purpose,
+        "md_fmt": _fmt_short(date.today()),
+        "md_long": _fmt_long(date.today()),
+        "mat_fmt": _fmt_long(terms.mat),
+        "months": months,
+        "is_io": is_io,
         "rate": _fmt_pct(rate),
         "fee": _fmt_pct(fee),
         "fee_amt": _money(loan * fee / 100) if loan and fee else "[Fee]",
-        "mat_fmt": _fmt_long(terms.mat),
-        "md_fmt": _fmt_short(date.today()),
-        "loan_type": terms.loan_type,
-        "months": calc.loan_term_months(ed, amort),
         "loan_money": _money(loan),
-        "income_money": _money(income),
-        "income_basis_money": _money(income_basis),
-        "contracted_income_money": (_money(contracted_income)
-                                    if contracted_income else ""),
-        "collateral_money": _money(collateral_value) if collateral_value else "",
-        "collateral_desc": collateral_desc,
-        "collateral_cell": collateral_cell,
-        "interest_money": _money(amort_for_tpl["interest"]),
         "lti": f"{lti:.1f}",
+        "income_basis_money": _money(income_basis),
+        "contracted_money": _money(contracted_income) if contracted_income else "",
         "ltv": f"{ltv:.1f}" if collateral_value else "",
         "dscr": f"{dscr:.2f}" if dscr else "",
+        "exec_summary": exec_summary,
+        "property_owner": terms.property_owner or (ed.property_owner if ed else "") or "",
+        "guarantors": (terms.guarantors or (ed.guarantors if ed else "")
+                       or f"{name} \u2014 full personal guarantee"),
+        "payments_desc": payments_desc,
+        "prepayment": terms.prepayment or (ed.prepayment if ed else "") or "",
+        "key_conditions": terms.key_conditions or (ed.key_conditions if ed else "") or "",
+        "collateral_cell": collateral_cell,
+        "collateral_desc": collateral_desc,
+        "collateral_money": _money(collateral_value) if collateral_value else "",
+        "collateral_basis": (ed.collateral_coverage[0].basis
+                             if ed and ed.collateral_coverage else ""),
+        "collateral_notes": ed.collateral_notes if ed else "",
+        "coverage": coverage_ctx,
         "background_text": (
             ed.background_narrative if ed and ed.background_narrative
-            else f"{terms.name or '[Borrower Name]'} is "
-                 f"{terms.occupation or '[role]'} at "
-                 f"{terms.employer or '[Business / Employer]'}"
+            else f"{name} is {terms.occupation or '[role]'} at "
+                 f"{employer or '[Business / Employer]'}"
                  f"{(' (' + terms.industry + ')') if terms.industry else ''}."),
-        # Rule 15: when the PFS was rolled forward, the drafted explanation is
-        # appended here - Lauren documents the roll-forward in this paragraph.
-        "credit_text": credit_text,
-        "compliance_html": _compliance_rows_html(compliance["rows"]),
-        "exceptions_html": _exceptions_html(compliance),
-        "provisional": compliance["provisional"],
-        "has_ins": has_ins,
-        # Rule 20: the borrower profile swaps Section IV's risk FAQ, Section
-        # I's purpose language and Section XI's primary repayment source.
-        # Underwriter-set only, never extracted.
-        "profile": profile,
-        "profile_label": calc.profile_label(profile),
-        # Section VII (Income Analysis) only. Section V (Borrower Background)
-        # deliberately does NOT repeat the income detail.
-        "income_notes": ed.income_notes if ed else "",
+        "financial_notes": ed.financial_notes if ed else "",
+        "fin": fin_ctx,
+        "debt_service_money": _money(debt_service),
+        "has_pfs": has_pfs,
         "cf_html": _cf_rows_html(cf),
-        "uses_html": _uses_of_funds_html(uof),
         "pfs_html": _pfs_html(ed, facility_due,
                               collateral_value or income,
                               (collateral_desc or "Pledged Collateral")
-                              if collateral_value
-                              else "Qualifying Income (Annual)",
+                              if collateral_value else "Qualifying Income (Annual)",
                               date.today()),
+        "credit_text": credit_text,
+        "risks": _risk_rows(ed, has_collateral=bool(collateral_value), is_io=is_io,
+                            has_insurance_policy=has_ins, profile=profile),
+        "repay_primary": (ed.repay_primary if ed and ed.repay_primary else
+                          {"business": "Operating cash flow of the Borrower's business.",
+                           "investment": "Net income from the Borrower's income-producing assets.",
+                           "consumer": "The Borrower's documented personal income."}[profile]),
+        "repay_secondary": (ed.repay_secondary if ed and ed.repay_secondary else
+                            ("Sale or refinance of the pledged collateral."
+                             if collateral_value else
+                             "Enforcement of the full personal guarantee.")),
+        "repay_tertiary": (ed.repay_tertiary if ed and ed.repay_tertiary else
+                           ("Foreclosure on the Lender's first-lien position and sale "
+                            f"of the collateral; at {ltv:.1f}% LTV a forced sale need "
+                            f"recover only about {ltv:.0f}% of appraised value to repay "
+                            "the loan in full." if collateral_value else
+                            "Liquidation of the Borrower's other personal assets, as "
+                            "shown on the Personal Financial Statement.")),
+        "uses_html": _uses_of_funds_html(uof),
+        "repayment_intro": (
+            f"The loan is interest only. The Borrower pays {_money2(monthly_payment)} each "
+            f"month, and the final payment is that interest plus the full "
+            f"{_money(loan)} principal." if is_io else
+            f"The loan fully amortizes over {months} months in level payments of "
+            f"{_money2(monthly_payment)}, interest accrued actual/360 on the declining "
+            f"balance."),
+        "repayment_bands": band_ctx,
+        "repayment_totals": totals_ctx,
         "repayment_html": _repayment_html(rep_rows, rep_totals),
+        "show_investor": bool(terms.show_investor_returns and loan and inv_rate),
+        "investor": investor_ctx,
+        "investor_differs": (abs(inv_rate - rate) > 1e-9
+                             or abs(inv_points - fee) > 1e-9),
+        "required_documents": list((ed.required_documents if ed else []) or []),
         "doc_list_html": _doc_list_html(filenames),
+        "recommendation": recommendation,
+        "show_compliance": _SHOW_COMPLIANCE,
+        "compliance_html": _compliance_rows_html(compliance["rows"]),
+        "exceptions_html": _exceptions_html(compliance),
+        "provisional": compliance["provisional"],
+        "profile": profile,
+        "profile_label": calc.profile_label(profile),
+        "income_notes": ed.income_notes if ed else "",
     }
 
     return _env.get_template("memo.html.j2").render(**context)

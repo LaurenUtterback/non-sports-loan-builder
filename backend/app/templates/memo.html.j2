@@ -33,7 +33,7 @@ tbody tr.grand td{font-weight:bold;background:var(--navy);color:#fff;border-colo
 /* In zebra tables the even-row stripe outranks tr.grand's navy background (equal
    specificity, later rule), leaving white text on a light stripe whenever the
    grand row lands on an even index. Re-assert the navy band at higher specificity
-   so the Section VIII Net Cash Flow row always matches the other grand rows
+   so the Net Cash Flow row always matches the other grand rows
    (Lauren, 2026-07-28). Literal colors, not var(), so the row also survives
    Word's HTML engine (which drops var() backgrounds — see render_word). */
 .zebra tbody tr.grand td{background:#0f2a43;color:#fff;border-color:#1c3d5a;}
@@ -46,7 +46,7 @@ ul.tight{margin:3pt 0 7pt;padding-left:18pt;}ul.tight li{margin-bottom:3pt;}
 .faq{margin-bottom:9pt;}.faq .q{font-weight:bold;color:#000;margin-bottom:2pt;}
 .note-fine{font-size:8.5pt;color:var(--ink-soft);}
 .pg-footer{position:absolute;left:.75in;right:.75in;bottom:.42in;display:flex;justify-content:space-between;align-items:center;font-family:Arial,Helvetica,sans-serif;font-size:6.8pt;letter-spacing:.1em;color:#8a8a8a;text-transform:uppercase;border-top:.75pt solid var(--rule);padding-top:5pt;}
-/* Deal Summary & Policy Compliance coversheet (page 1). Literal colors on the
+/* The compliance checklist, now the closing APPENDIX. Literal colors on the
    status boxes (not var()) so they survive Word's HTML engine — see render_word. */
 .cover-title{margin:8pt 0 8pt;}
 .cover-title h1{font-size:17pt;}
@@ -67,106 +67,211 @@ table.compliance thead th{font-size:7pt;padding:2.5pt 5pt;}
 .approval .line{border-bottom:1pt solid #1a1a1a;height:14pt;}
 .approval .cap{font-family:Arial,Helvetica,sans-serif;font-size:7pt;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:#444;margin-top:3pt;}
 @page{size:letter;margin:.7in .75in .6in;}
+.kpi-strip{display:flex;gap:0;margin:10pt 0 4pt;border-top:1.5pt solid var(--navy);border-bottom:.75pt solid var(--rule);}
+.kpi{flex:1;padding:7pt 10pt 7pt 0;}
+.kpi + .kpi{padding-left:12pt;border-left:.75pt solid var(--rule);}
+.kpi .v{font-family:Georgia,'Times New Roman',serif;font-size:15pt;font-weight:bold;color:var(--navy);line-height:1.1;}
+.kpi .k{font-family:Arial,Helvetica,sans-serif;font-size:6.5pt;letter-spacing:.14em;text-transform:uppercase;color:#8a8a8a;margin-top:3pt;}
+.meta-line{font-family:Arial,Helvetica,sans-serif;font-size:8pt;letter-spacing:.06em;color:#6a6a6a;text-transform:uppercase;margin-top:4pt;}
+.risk-item{margin:0 0 7pt;}
+.risk-item .rl{font-weight:bold;color:var(--navy);}
+.risk-item .rm{display:block;margin-top:2pt;padding-left:10pt;border-left:2pt solid var(--gold);}
+.risk-item .open{display:block;margin-top:2pt;padding-left:10pt;border-left:2pt solid #b00;color:#b00;font-style:italic;}
+.tbd{color:#8a6a00;font-style:italic;}
 @media print{body{background:none;padding:0;}.page{width:auto;min-height:0;margin:0;padding:0;box-shadow:none;border-radius:0;break-after:page;}.page:last-child{break-after:auto;}.pg-footer{display:none;}.section,.faq,.src,.callout,tr,thead{break-inside:avoid;}h2.sec,h3.sub{break-after:avoid;}th,td,thead th,tbody tr.grand td,.brand .brand-logo,.doc-meta .conf,h2.sec .num,.src,.st{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 </style></head>
 <body style="background-color:rgba(255,255,253,0.98)">
+{%- set pg = namespace(n=0) -%}
+{%- set total_pages = page_count -%}
+{% macro footer() %}{% set pg.n = pg.n + 1 %}<div class="pg-footer"><span>South River Capital &mdash; Confidential &mdash; {{ name }} Credit Memorandum</span><span>Page {{ pg.n }} of {{ total_pages }}</span></div>{% endmacro %}
+
 <div class="page">
-<header class="masthead"><div class="brand"><img class="brand-logo" src="{{ logo }}" alt="South River Capital"></div><div class="doc-meta"><div class="dt">Memo Date: <span>{{ md_fmt }}</span></div></div></header>
-<div class="doc-title cover-title"><div class="kicker">South River Capital</div><h1>Deal Summary &amp; Policy Compliance</h1></div>
-<table class="kv two"><tbody>
-<tr><td class="k">Borrower</td><td>{{ name }}</td><td class="k">{% if contracted_income_money %}Contracted Income{% else %}Qualifying Income{% endif %}</td><td>{{ income_basis_money }}</td></tr>
-<tr><td class="k">Business / Employer</td><td>{{ employer }}{% if industry %} &mdash; {{ industry }}{% endif %}</td><td class="k">LTI</td><td>{{ lti }}%</td></tr>
-<tr><td class="k">Loan</td><td>{{ loan_money }} at {{ rate }}% per annum</td><td class="k">Term</td><td>{{ months }}-month balloon &mdash; matures {{ mat_fmt }}</td></tr>
-<tr><td class="k">Collateral</td><td>{{ collateral_cell }}{% if collateral_money %} ({{ collateral_money }}){% endif %} &middot; personal guarantee &middot; {% if has_ins %}life/disability policy{% else %}No Insurance{% endif %}</td><td class="k">{% if ltv %}LTV{% else %}Repayment{% endif %}</td><td>{% if ltv %}{{ ltv }}%{% else %}Balloon at maturity{% endif %}</td></tr>
-<tr><td class="k">Borrower Profile</td><td>{{ profile_label }}</td><td class="k">{% if dscr %}DSCR{% else %}Repayment{% endif %}</td><td>{% if dscr %}{{ dscr }}x{% else %}Balloon at maturity{% endif %}</td></tr>
+<header class="masthead"><div class="brand"><img class="brand-logo" src="{{ logo }}" alt="South River Capital"></div><div class="doc-meta"><div class="conf">Confidential</div><div class="dt">Memo Date: <span>{{ md_fmt }}</span></div></div></header>
+
+<div class="doc-title"><div class="kicker">Credit Memorandum &nbsp;|&nbsp; Confidential</div><h1>{{ headline }}</h1></div>
+<p class="meta-line">{{ md_long }}{% if asset_class %} &nbsp;|&nbsp; {{ asset_class }}{% endif %}{% if purpose %} &nbsp;|&nbsp; {{ purpose }}{% endif %}</p>
+
+<div class="kpi-strip">
+  <div class="kpi"><div class="v">{{ loan_money }}</div><div class="k">Loan Amount</div></div>
+  <div class="kpi"><div class="v">{{ rate }}%{% if fee %} + {{ fee }} pt{% if fee != '1' %}s{% endif %}{% endif %}</div><div class="k">Rate / Points</div></div>
+  <div class="kpi"><div class="v">{% if ltv %}{{ ltv }}%{% else %}{{ lti }}%{% endif %}</div><div class="k">{% if ltv %}Loan-to-Value{% else %}Loan-to-Income{% endif %}</div></div>
+  <div class="kpi"><div class="v">{{ months }} mo</div><div class="k">{% if is_io %}Interest Only{% else %}Amortizing{% endif %}</div></div>
+</div>
+
+<section class="section"><h2 class="sec">Executive Summary</h2>
+<div class="callout"><p>{{ exec_summary }}</p></div></section>
+
+{{ footer() }}
+</div>
+
+<div class="page">
+<section class="section"><h2 class="sec">Loan Summary</h2>
+<table class="kv"><tbody>
+<tr><td class="k">Borrower</td><td>{{ name }}</td></tr>
+{% if property_owner %}<tr><td class="k">Property Owner / Grantor</td><td>{{ property_owner }}</td></tr>{% endif %}
+<tr><td class="k">Guarantor(s)</td><td>{{ guarantors }}</td></tr>
+<tr><td class="k">Purpose</td><td>{{ purpose or tbd }}</td></tr>
+<tr><td class="k">Loan Amount</td><td>{{ loan_money }}</td></tr>
+<tr><td class="k">Term</td><td>{{ months }} months{% if mat_fmt %} &mdash; matures {{ mat_fmt }}{% endif %}</td></tr>
+<tr><td class="k">Interest Rate</td><td>{{ rate }}% fixed</td></tr>
+<tr><td class="k">Origination</td><td>{{ fee }}% ({{ fee_amt }})</td></tr>
+<tr><td class="k">Payments</td><td>{{ payments_desc }}</td></tr>
+{% if show_investor %}<tr><td class="k">Investor Return</td><td>{{ investor.rate }}% and {{ investor.points }} point{% if investor.points != '1' %}s{% endif %}</td></tr>{% endif %}
+<tr><td class="k">Collateral</td><td>{{ collateral_cell }}</td></tr>
+{% if collateral_money %}<tr><td class="k">Collateral Value</td><td>{{ collateral_money }}{% if collateral_basis %} &mdash; {{ collateral_basis }}{% endif %}</td></tr>
+<tr><td class="k">Loan-to-Value</td><td>{{ ltv }}%</td></tr>{% endif %}
+{# The LTI basis has to be disclosed, not just used: a reader cannot check the
+   ratio without knowing which income figure it ran on. #}
+<tr><td class="k">{% if contracted_money %}Contracted Income (facility term){% else %}Qualifying Income (annual){% endif %}</td><td>{{ income_basis_money }}{% if contracted_money %} committed by contract or lease{% endif %}</td></tr>
+<tr><td class="k">Loan-to-Income</td><td>{{ lti }}%</td></tr>
+<tr><td class="k">Prepayment</td><td>{{ prepayment or tbd }}</td></tr>
+<tr><td class="k">Key Conditions</td><td>{{ key_conditions or tbd }}</td></tr>
+</tbody></table></section>
+{{ footer() }}
+</div>
+
+<div class="page">
+<section class="section"><h2 class="sec">Collateral Analysis</h2>
+{% if collateral_notes %}<p>{{ collateral_notes }}</p>
+{% elif collateral_money %}<p>The facility is secured by {{ collateral_desc or 'the pledged collateral' }}, valued at <strong>{{ collateral_money }}</strong>. A first-lien position is perfected by UCC-1 filing and, for real property, a recorded mortgage or deed of trust. <span class="tbd">[Describe the collateral: what it is, its condition, the valuation basis and date, and who prepared it.]</span></p>
+{% else %}<p>No specific collateral is pledged. The facility is unsecured and rests on the full personal guarantee of the Borrower, supported by a UCC-1 filing against the Borrower's business assets.</p>{% endif %}
+
+{% if coverage.rows %}
+<table class="zebra"><thead><tr><th>Collateral Coverage</th><th class="num-col">Value</th><th class="num-col">LTV</th></tr></thead><tbody>
+{% for r in coverage.rows %}<tr><td>{{ r.basis }}</td><td class="num-col">{{ r.value_money }}</td><td class="num-col">{% if r.ltv %}{{ r.ltv }}%{% else %}&mdash;{% endif %}</td></tr>{% endfor %}
+{% if coverage.equity_money %}<tr class="total"><td>Equity cushion below SRC's position</td><td class="num-col">{{ coverage.equity_money }}</td><td class="num-col">&mdash;</td></tr>{% endif %}
 </tbody></table>
-<section class="section cover-sec"><h2 class="sec">Policy Compliance</h2>
+<p class="note-fine">Each basis is shown with the leverage it implies, including the unfavourable ones, so the reader sees the LTV under a stressed value and not only under the appraisal.</p>
+{% endif %}
+</section>
+
+<section class="section"><h2 class="sec">Borrower Profile</h2>
+<p class="lead">{{ background_text }}</p></section>
+{{ footer() }}
+</div>
+
+<div class="page">
+<section class="section"><h2 class="sec">Financial Analysis</h2>
+{% if financial_notes %}<p>{{ financial_notes }}</p>{% endif %}
+{% if fin.periods %}
+<table class="zebra"><thead><tr><th></th>{% for p in fin.periods %}<th class="num-col">{{ p.period }}</th>{% endfor %}</tr></thead><tbody>
+<tr><td>Revenue</td>{% for p in fin.periods %}<td class="num-col">{{ p.revenue_money }}</td>{% endfor %}</tr>
+<tr><td>EBITDA</td>{% for p in fin.periods %}<td class="num-col">{{ p.ebitda_money }}</td>{% endfor %}</tr>
+<tr><td>Net Income</td>{% for p in fin.periods %}<td class="num-col">{{ p.net_income_money }}</td>{% endfor %}</tr>
+<tr><td>Proposed Debt Service</td>{% for p in fin.periods %}<td class="num-col">{{ p.debt_service_money }}</td>{% endfor %}</tr>
+<tr class="total"><td>DSCR (EBITDA / Debt Service)</td>{% for p in fin.periods %}<td class="num-col">{{ p.dscr_fmt }}</td>{% endfor %}</tr>
+</tbody></table>
+{% else %}
+<p class="tbd">[No financial statements were among the documents. Request FY statements and YTD interims, then re-run the extraction: Revenue, EBITDA, Net Income and DSCR per period populate this table.]</p>
+{% endif %}
+<p>Annual debt service on the proposed facility is <strong>{{ debt_service_money }}</strong>. Break-even EBITDA is {{ fin.breakeven[0].money }} for 1.00x coverage, {{ fin.breakeven[1].money }} for 1.25x, and {{ fin.breakeven[2].money }} for 1.50x.</p>
+</section>
+
+{% if has_pfs %}
+<section class="section"><h2 class="sec">Guarantor Cash Flow</h2>
+<p>The analysis below is based on the Borrower's documented income and the Personal Financial Statement on file. After servicing all existing debt, the Borrower maintains the net cash flow shown below.</p>
+<table class="zebra"><caption>Personal Cash Flow Analysis &mdash; {{ name }}</caption><thead><tr><th style="width:34px">Note</th><th>Line Item</th><th class="num-col">Annual</th></tr></thead><tbody>{{ cf_html }}</tbody></table>
+<p class="note-fine"><strong>Notes:</strong>&nbsp; 1 &mdash; Annual qualifying income, documented and recurring. &nbsp;2 &mdash; Other income per Annual Income section of PFS. &nbsp;3 &mdash; Estimated 45% blended tax rate applied to gross income. &nbsp;4 &mdash; Estimated 10% of gross income to cover all ordinary living expenses. &nbsp;5 &mdash; Proposed Facility shown at principal; the interest-included total is carried as a liability on the Personal Financial Statement.</p></section>
+{% endif %}
+{{ footer() }}
+</div>
+
+{% if has_pfs %}
+<div class="page">
+<section class="section"><h2 class="sec">Personal Financial Statement</h2>
+<table><caption>As reported on Personal Financial Statement &mdash; {{ name }}</caption><thead><tr><th>Assets</th><th class="num-col">Actual</th></tr></thead><tbody>{{ pfs_html }}</tbody></table>
+<p><strong>Credit:</strong> {{ credit_text }}</p></section>
+{{ footer() }}
+</div>
+{% endif %}
+
+<div class="page">
+<section class="section"><h2 class="sec">Risk Considerations &amp; Mitigants</h2>
+{% if risks %}
+{% for r in risks %}<div class="risk-item"><span class="rl">{{ r.risk }}:</span> {{ r.detail }}{% if r.mitigant %}<span class="rm"><strong>Mitigant:</strong> {{ r.mitigant }}</span>{% else %}<span class="open"><strong>Mitigant:</strong> none identified &mdash; outstanding at the date of this memorandum.</span>{% endif %}</div>{% endfor %}
+{% else %}
+<p class="tbd">[No risks were captured from the documents. State each material risk and the mitigant that answers it &mdash; an unmitigated risk still belongs here.]</p>
+{% endif %}
+</section>
+
+<section class="section"><h2 class="sec">How will the borrower reservice the debt</h2>
+<p><strong>Primary Repayment source:</strong> {{ repay_primary }}</p>
+<p><strong>Secondary Repayment source:</strong> {{ repay_secondary }}</p>
+<p><strong>Tertiary Repayment source:</strong> {{ repay_tertiary }}</p></section>
+{{ footer() }}
+</div>
+
+<div class="page">
+<section class="section"><h2 class="sec">Sources and Uses Summary</h2>
+<p>Estimated use of loan proceeds are below.</p>
+<table><thead><tr><th>Disbursement</th><th class="num-col">Amount</th></tr></thead><tbody>{{ uses_html }}</tbody></table>
+<p class="note-fine">Disbursement amounts are estimates sourced from the deal documents; confirm against the final settlement statement.</p></section>
+
+<section class="section"><h2 class="sec">Repayment Schedule</h2>
+<p>{{ repayment_intro }}</p>
+{% if repayment_bands %}
+<table class="zebra"><thead><tr><th>Period</th><th class="num-col">Interest</th><th class="num-col">Principal</th><th class="num-col">Total Paid</th></tr></thead><tbody>
+{% for b in repayment_bands %}<tr><td>{{ b.label }}</td><td class="num-col">{{ b.interest_money }}</td><td class="num-col">{{ b.principal_money }}</td><td class="num-col">{{ b.total_money }}</td></tr>{% endfor %}
+<tr class="total"><td>Total</td><td class="num-col">{{ repayment_totals.interest_money }}</td><td class="num-col">{{ repayment_totals.principal_money }}</td><td class="num-col">{{ repayment_totals.total_money }}</td></tr>
+</tbody></table>
+<p class="note-fine">Annual bands; the payment-by-payment schedule is Exhibit A to the promissory note.</p>
+{% else %}
+<table class="zebra"><thead><tr><th style="width:52px">Payment</th><th>Date</th><th class="num-col">Interest</th><th class="num-col">Principal</th><th class="num-col">Total</th></tr></thead><tbody>{{ repayment_html }}</tbody></table>
+{% endif %}
+</section>
+{{ footer() }}
+</div>
+
+<div class="page">
+{% if show_investor %}
+<section class="section"><h2 class="sec">Investor Returns</h2>
+<p>Investors receive {{ investor.rate }}% per annum, paid monthly, plus {{ investor.points }} point{% if investor.points != '1' %}s{% endif %} at closing.{% if investor_differs %} These are the investor economics and differ from what the Borrower pays ({{ rate }}% and {{ fee }} points).{% else %} These are the same economics the Borrower pays.{% endif %}</p>
+<table class="zebra"><thead><tr><th></th><th class="num-col">Per {{ investor.unit_money }} Invested</th><th class="num-col">Full {{ loan_money }}</th></tr></thead><tbody>
+<tr><td>Points at closing ({{ investor.points }}%)</td><td class="num-col">{{ investor.per_unit.points_money }}</td><td class="num-col">{{ investor.full.points_money }}</td></tr>
+<tr><td>Monthly interest</td><td class="num-col">{{ investor.per_unit.monthly_money }}</td><td class="num-col">{{ investor.full.monthly_money }}</td></tr>
+<tr><td>Annual interest ({{ investor.rate }}%)</td><td class="num-col">{{ investor.per_unit.annual_money }}</td><td class="num-col">{{ investor.full.annual_money }}</td></tr>
+<tr class="total"><td>Total income over {{ months }} months</td><td class="num-col">{{ investor.per_unit.total_money }}</td><td class="num-col">{{ investor.full.total_money }}</td></tr>
+</tbody></table></section>
+{% endif %}
+
+<section class="section"><h2 class="sec">Required Documents</h2>
+{% if required_documents %}
+<ul class="tight">{% for d in required_documents %}<li>{{ d }}</li>{% endfor %}</ul>
+{% else %}
+<p class="tbd">[List what must be in hand before closing &mdash; valuations, entity documents, title, insurance, payoff letters, financial statements.]</p>
+{% endif %}
+{% if doc_list_html %}<h3 class="sub">Documents reviewed</h3>
+<table class="kv"><tbody>{{ doc_list_html }}</tbody></table>{% endif %}
+</section>
+
+<section class="section"><h2 class="sec">Recommendation</h2>
+<div class="callout"><p>{{ recommendation }}</p></div>
+<div class="approval" style="margin-top:14pt">
+  <div class="sig"><div class="line"></div><div class="cap">Prepared by</div></div>
+  <div class="sig sig-date"><div class="line"></div><div class="cap">Date</div></div>
+</div>
+<div class="approval">
+  <div class="sig"><div class="line"></div><div class="cap">Reviewed by</div></div>
+  <div class="sig sig-date"><div class="line"></div><div class="cap">Date</div></div>
+</div>
+<div class="approval">
+  <div class="sig"><div class="line"></div><div class="cap">Approved by</div></div>
+  <div class="sig sig-date"><div class="line"></div><div class="cap">Date</div></div>
+</div>
+</section>
+<p class="note-fine" style="margin-top:12pt">This memorandum is prepared solely for the internal credit evaluation of South River Capital and its participation lenders. All information is derived from executed loan documents, third-party reports, and borrower-provided financial statements on file. This document is <strong>confidential</strong> and intended only for authorized recipients.</p>
+{{ footer() }}
+</div>
+
+{% if show_compliance %}
+<div class="page">
+<div class="doc-title cover-title"><div class="kicker">Appendix</div><h1>Policy Compliance</h1></div>
+<section class="section cover-sec">
 <table class="zebra compliance"><thead><tr><th>Criteria / Covenant</th><th style="width:78px">Requirement</th><th>Actual</th><th style="width:104px">Status</th></tr></thead><tbody>{{ compliance_html }}</tbody></table></section>
 <section class="section cover-sec"><h3 class="sub">Exceptions &amp; Mitigants</h3>
 <div class="callout">{{ exceptions_html }}</div></section>
 <div class="approval"><div class="sig"><div class="line"></div><div class="cap">Credit Approval &mdash; Exceptions Acknowledged</div></div><div class="sig sig-date"><div class="line"></div><div class="cap">Date</div></div></div>
 <p class="note-fine" style="margin-top:6pt;font-size:7.5pt">Thresholds per South River Capital non-sports lending guidelines; any exception requires credit approval prior to funding. {{ provisional }}</p>
-<div class="pg-footer"><span>South River Capital &mdash; Credit Memorandum</span><span>Page 1 of 7</span></div>
+{{ footer() }}
 </div>
-<div class="page">
-<header class="masthead"><div class="brand"><img class="brand-logo" src="{{ logo }}" alt="South River Capital"></div><div class="doc-meta"><div class="dt">Memo Date: <span>{{ md_fmt }}</span></div></div></header>
-<div class="doc-title"><div class="kicker">South River Capital</div><h1>Credit Memorandum</h1></div>
-<table class="kv two"><tbody>
-<tr><td class="k">Borrower</td><td>{{ name }}</td><td class="k">Industry</td><td>{{ industry }}</td></tr>
-<tr><td class="k">Address</td><td>{{ addr }}</td><td class="k">Loan Type</td><td>{{ loan_type }}</td></tr>
-<tr><td class="k">Phone</td><td>{{ phone }}</td><td class="k">Date of Birth</td><td>{{ dob }}</td></tr>
-<tr><td class="k">Business / Employer</td><td>{{ employer }}</td><td class="k">Tax&nbsp;ID / Driver's&nbsp;Lic.</td><td>{{ ssn }} / {{ dl }}</td></tr>
-</tbody></table>
-<section class="section"><h2 class="sec"><span class="num">I</span>Purpose of Proposed Facility</h2>
-<div class="callout"><p>The Borrower is requesting a <strong>{{ loan_money }}</strong> loan{% if contracted_income_money %} as an advance against <strong>{{ contracted_income_money }}</strong> in contracted income{% else %} supported by <strong>{{ income_money }}</strong> in annual qualifying income{% endif %}.
-{% if profile == 'business' %}{{ name }} is {{ occupation }} at {{ employer }}{% if industry %}, a {{ industry }} business{% endif %}. Repayment is supported by the income the Borrower draws from the business, as documented in the tax returns and financial statements on file.
-{% elif profile == 'investment' %}{{ name }} holds income-producing assets through {{ employer }}{% if industry %} ({{ industry }}){% endif %}. Repayment is supported by net income from those assets{% if collateral_money %}, and the facility is secured by {{ collateral_desc or 'the pledged collateral' }} valued at <strong>{{ collateral_money }}</strong>{% endif %}.
-{% else %}{{ name }} is {{ occupation }} at {{ employer }}. Repayment is supported by documented personal income.{% endif %}
-The facility is structured to balloon in <strong>{{ mat_fmt }}</strong>.</p></div>
-<div class="src-grid"><div class="src"><div class="lab">Primary</div><div class="ord">Repayment Source</div><p style="margin:0">{% if profile == 'business' %}Cash flow from the Borrower's business income.{% elif profile == 'investment' %}Net income from the Borrower's income-producing assets.{% else %}The Borrower's documented personal income.{% endif %}</p></div><div class="src"><div class="lab">Secondary</div><div class="ord">Repayment Source</div><p style="margin:0">{% if collateral_money %}Liquidation of the pledged collateral, and enforcement of the full personal guarantee provided by the Borrower.{% else %}Enforcement of the full personal guarantee provided by the Borrower.{% endif %}</p></div>{% if has_ins %}<div class="src"><div class="lab">Tertiary</div><div class="ord">Repayment Source</div><p style="margin:0">Life / disability insurance policy assigned to Lender.</p></div>{% endif %}</div></section>
-<section class="section"><h2 class="sec"><span class="num">II</span>Recommendation &amp; Action Request</h2>
-<h3 class="sub">Summary of Transaction Recommendations</h3>
-<ul class="tight"><li>Lender to provide a <strong>{{ loan_money }}</strong> loan at <strong>{{ rate }}%</strong> per annum based on the Borrower's documented income{% if collateral_money %} and the pledged collateral{% endif %}.</li><li>Borrower to authorize ACH debit from an operating account for automatic payment of each scheduled installment.</li><li>Lender to file a UCC-1 financing statement against {% if collateral_money %}the pledged collateral{% else %}the Borrower's business assets{% endif %}.</li>{% if collateral_money %}<li>Lender to obtain a third-party appraisal or valuation of the pledged collateral prior to funding.</li>{% endif %}{% if has_ins %}<li>Lender to be protected by a life / disability insurance policy assigned to Lender.</li>{% endif %}</ul>
-<h3 class="sub">Action Request Details</h3>
-<ul class="tight"><li>Lender to provide a <strong>{{ months }}</strong>-month full balloon loan; all principal and interest due at maturity {{ mat_fmt }}.</li><li>Borrower to authorize ACH debit from an operating account for automatic payment.</li><li>Lender to file a UCC-1 financing statement against {% if collateral_money %}the pledged collateral{% else %}the Borrower's business assets{% endif %}.</li>{% if advisor %}<li>Borrower's adviser: <strong>{{ advisor }}</strong></li>{% endif %}</ul></section>
-<div class="pg-footer"><span>South River Capital &mdash; Credit Memorandum</span><span>Page 2 of 7</span></div>
-</div>
-<div class="page">
-<section class="section"><h2 class="sec"><span class="num">III</span>New Facility Terms &amp; Conditions</h2>
-<table class="kv"><tbody><tr><td class="k">Borrower</td><td>{{ name }}</td></tr><tr><td class="k">Relationship</td><td>{{ loan_type }} Borrower</td></tr><tr><td class="k">Loan Type</td><td>{% if profile == 'business' %}Business-income loan{% elif profile == 'investment' %}Asset-secured loan{% else %}Personal income loan{% endif %}</td></tr><tr><td class="k">Purpose</td><td>Business purposes</td></tr><tr><td class="k">Proposed Commitment</td><td>{{ loan_money }}</td></tr><tr><td class="k">Proposed Maturity</td><td>{{ mat_fmt }}</td></tr><tr><td class="k">Amortization Schedule</td><td>Balloon</td></tr><tr><td class="k">Balloon at Maturity</td><td>Yes</td></tr><tr><td class="k">Upfront Fee</td><td>{{ fee }}% ({{ fee_amt }})</td></tr><tr><td class="k">Interest Rate</td><td>{{ rate }}%</td></tr><tr><td class="k">Prepayment Penalty</td><td>None</td></tr><tr><td class="k">Collateral</td><td>{% if collateral_money %}{{ collateral_desc or 'Pledged collateral' }} &mdash; UCC-1 filing{% else %}Unsecured &mdash; personal guarantee; UCC-1 filing against business assets{% endif %}</td></tr><tr><td class="k">Appraisals</td><td>{% if collateral_money %}Third-party valuation of pledged collateral &mdash; condition of closing{% else %}None{% endif %}</td></tr><tr><td class="k">Formulas / Advances</td><td>LTI (Loan-to-Income): {{ loan_money }} loan &divide; {{ income_basis_money }} {% if contracted_income_money %}contracted income{% else %}annual qualifying income{% endif %} = <strong>{{ lti }}%</strong>{% if ltv %}<br>LTV (Loan-to-Value): {{ loan_money }} loan &divide; {{ collateral_money }} collateral = <strong>{{ ltv }}%</strong>{% endif %}{% if dscr %}<br>DSCR: cash available for debt service &divide; total debt service = <strong>{{ dscr }}x</strong>{% endif %}</td></tr><tr><td class="k">Guarantor(s)</td><td>{{ name }}</td></tr><tr><td class="k">Subordinations</td><td>None</td></tr><tr><td class="k">Repayment</td><td>{% if profile == 'business' %}Business income{% elif profile == 'investment' %}Net income from income-producing assets{% else %}Documented personal income{% endif %} &middot; enforcement of personal guarantee{% if collateral_money %} &middot; pledged collateral{% endif %}{% if has_ins %} &middot; life/disability policy assigned to Lender{% endif %}</td></tr></tbody></table></section>
-<section class="section"><h2 class="sec"><span class="num">IV</span>Risk Considerations &amp; FAQ</h2>
-{% if profile == 'business' %}
-<div class="faq"><div class="q">What if the business loses its largest customers?</div><ul class="tight"><li>Customer concentration is the principal risk to a closely held business's income. The concentration shown in the financial statements on file is confirmed at underwriting, and a material loss of revenue is a reportable event under the loan documents.</li><li>The facility is underwritten against documented historical income, not projected revenue, so a decline is measured against figures the Borrower has already achieved.</li></ul></div>
-<div class="faq"><div class="q">What if business income falls or the business operates at a loss?</div><ul class="tight"><li>Owner income varies with the business. The qualifying income is taken from the most recent complete tax year as filed, with prior years and the trend disclosed in the Income Analysis, so the underwriting basis is a documented figure rather than a favourable one.</li><li>The Borrower's personal guarantee reaches assets outside the business, and the Personal Financial Statement is the measure of that support.</li></ul></div>
-<div class="faq"><div class="q">What if the Borrower dies, is disabled, or leaves the business?</div><ul class="tight"><li>Key-person risk is concentrated in a closely held business: the income underwritten here depends on the Borrower's continued involvement.</li>{% if has_ins %}<li>The Lender is assigned a separate life / disability insurance policy naming only the Lender.</li>{% else %}<li>No policy is assigned on this facility; the guarantee and the Borrower's estate are the support.</li>{% endif %}</ul></div>
-{% elif profile == 'investment' %}
-<div class="faq"><div class="q">What if the properties sit vacant or tenants stop paying?</div><ul class="tight"><li>Vacancy and tenant default are the principal risks to rental income. The qualifying income is net of operating expenses, taxes, insurance and existing mortgage debt service, so it is not a gross-rent figure.</li><li>Leases and the rent roll on file are confirmed at underwriting, and the lease terms relative to the facility's maturity are disclosed in the Income Analysis.</li></ul></div>
-<div class="faq"><div class="q">What if the collateral falls in value?</div><ul class="tight"><li>{% if collateral_money %}The facility advances {{ ltv }}% against a {{ collateral_money }} third-party valuation, leaving equity ahead of the Lender's position.{% else %}No specific collateral is pledged on this facility; it rests on the personal guarantee.{% endif %}</li><li>A valuation obtained for this loan is a condition of closing, and the Lender holds a first-lien position by UCC-1 filing{% if collateral_money %} and, for real property, a recorded mortgage or deed of trust{% endif %}.</li></ul></div>
-<div class="faq"><div class="q">What if the Borrower cannot refinance or sell at maturity?</div><ul class="tight"><li>Balloon maturity carries refinancing risk. The exit is sale or refinance of the asset, and the equity cushion above is what makes either available.</li><li>The Borrower's other liquid assets, as shown on the Personal Financial Statement, are the secondary path to repayment.</li></ul></div>
-{% else %}
-<div class="faq"><div class="q">What if the Borrower loses their job or their income is interrupted?</div><ul class="tight"><li>Income interruption is the principal risk on a facility carried by personal income. The qualifying income is documented from returns, W-2s and pay stubs rather than projected.</li><li>The Borrower's liquid assets, as shown on the Personal Financial Statement, are the first support through an interruption.</li></ul></div>
-<div class="faq"><div class="q">What if the Borrower dies or is disabled?</div><ul class="tight"><li>{% if has_ins %}The Lender is assigned a separate life / disability insurance policy naming only the Lender.{% else %}No policy is assigned on this facility; the guarantee and the Borrower's estate are the support.{% endif %}</li></ul></div>
 {% endif %}
-<div class="faq"><div class="q">What if the Borrower over-leverages and becomes insolvent?</div><ul class="tight"><li>The Lender holds a first right of refusal on all additional debt; failure to comply is an event of default.</li><li>ACH debit on each due date repays Lender from the operating account before other discretionary uses.</li><li>Periodic credit report pulls &mdash; any new leverage triggers an event of default.</li></ul></div>
-</section>
-<div class="pg-footer"><span>South River Capital &mdash; Credit Memorandum</span><span>Page 3 of 7</span></div>
-</div>
-<div class="page">
-<section class="section"><h2 class="sec"><span class="num">V</span>Borrower Background</h2><p class="lead">{{ background_text }}</p></section>
-<section class="section"><h2 class="sec"><span class="num">VI</span>Uses of Funds</h2>
-<p>The disbursement of the proposed facility is set out below.</p>
-<table><thead><tr><th>Disbursement</th><th class="num-col">Amount</th></tr></thead><tbody>{{ uses_html }}</tbody></table>
-<p class="note-fine">Disbursement amounts are estimates sourced from the deal documents; confirm against the final settlement statement.</p></section>
-<section class="section"><h2 class="sec"><span class="num">VII</span>Income Analysis</h2>
-{% if income_notes %}<p>{{ income_notes }}</p>{% endif %}
-<p>{{ name }} has documented annual qualifying income of <strong>{{ income_money }}</strong>{% if employer %} from {{ employer }}{% endif %}.{% if contracted_income_money %} Of that, <strong>{{ contracted_income_money }}</strong> is committed by contract or lease over the term of this facility and serves as the LTI basis.{% endif %}</p>
-<table><thead><tr><th>Basis</th><th class="num-col">Amount</th><th>Status</th></tr></thead><tbody>{% if contracted_income_money %}<tr><td>Contracted Income (facility term)</td><td class="num-col">{{ contracted_income_money }}</td><td>Committed by contract / lease</td></tr>{% endif %}<tr class="total"><td><strong>Underwriting Basis (Qualifying Income)</strong></td><td class="num-col"><strong>{{ income_money }}</strong></td><td>Documented &mdash; annual</td></tr></tbody></table>
-<p class="note-fine">Figures reflect documented, recurring income only, per South River Capital underwriting policy. Projections, capital gains and non-recurring items are excluded.</p></section>
-<div class="pg-footer"><span>South River Capital &mdash; Credit Memorandum</span><span>Page 4 of 7</span></div>
-</div>
-<div class="page">
-<section class="section"><h2 class="sec"><span class="num">VIII</span>Guarantor Analysis</h2>
-<p>The analysis below is based on the Borrower's documented income and the Personal Financial Statement on file. After servicing all existing debt, the Borrower maintains the net cash flow shown below.</p>
-<table class="zebra"><caption>Personal Cash Flow Analysis &mdash; {{ name }}</caption><thead><tr><th style="width:34px">Note</th><th>Line Item</th><th class="num-col">Annual</th></tr></thead><tbody>{{ cf_html }}</tbody></table>
-<p class="note-fine"><strong>Notes:</strong>&nbsp; 1 &mdash; Annual qualifying income, documented and recurring. &nbsp;2 &mdash; Other income per Annual Income section of PFS. &nbsp;3 &mdash; Estimated 45% blended tax rate applied to gross income. &nbsp;4 &mdash; Estimated 10% of gross income to cover all ordinary living expenses. &nbsp;5 &mdash; Proposed Facility shown at principal (loan amount); the interest-included total is carried as a liability on the Personal Financial Statement. Alimony/child support and all other debt line items sourced from the Annual Expenditures section of the PFS and supporting documents.</p></section>
-<section class="section"><h2 class="sec"><span class="num">IX</span>Personal Financial Statement</h2>
-<table><caption>As reported on Personal Financial Statement &mdash; {{ name }}</caption><thead><tr><th>Assets</th><th class="num-col">Actual</th></tr></thead><tbody>{{ pfs_html }}</tbody></table>
-<p><strong>Credit:</strong> {{ credit_text }}</p></section>
-<div class="pg-footer"><span>South River Capital &mdash; Credit Memorandum</span><span>Page 5 of 7</span></div>
-</div>
-<div class="page">
-<section class="section"><h2 class="sec"><span class="num">X</span>Repayment &amp; Amortization</h2>
-<p>Interest is paid monthly; the principal is repaid as a single balloon at maturity.</p>
-<table class="zebra"><thead><tr><th style="width:52px">Payment</th><th>Date</th><th class="num-col">Interest</th><th class="num-col">Principal</th><th class="num-col">Total</th></tr></thead><tbody>{{ repayment_html }}</tbody></table>
-<p class="note-fine">Repayment schedule per the deal documents. Interest at {{ rate }}% p.a. on {{ loan_money }}; principal due as a balloon at maturity, each payment collected by ACH debit. UCC-1 filed against {% if collateral_money %}the pledged collateral{% else %}the Borrower's business assets{% endif %} to secure first-lien position.</p></section>
-<section class="section"><h2 class="sec"><span class="num">XI</span>Repayment Sources</h2>
-<div class="src-grid"><div class="src"><div class="lab">Primary</div><div class="ord">Source</div><p style="margin:0">{% if profile == 'business' %}Income drawn from the Borrower's business.{% elif profile == 'investment' %}Net income from the Borrower's income-producing assets.{% else %}The Borrower's documented personal income.{% endif %}</p></div><div class="src"><div class="lab">Secondary</div><div class="ord">Source</div><p style="margin:0">Personal guarantee of the Borrower, including confession of judgment and consent to wage garnishment{% if collateral_money %}, and liquidation of the pledged collateral{% endif %}.</p></div>{% if has_ins %}<div class="src"><div class="lab">Tertiary</div><div class="ord">Source</div><p style="margin:0">Life / disability insurance policy assigned to Lender.</p></div>{% endif %}</div></section>
-<div class="pg-footer"><span>South River Capital &mdash; Credit Memorandum</span><span>Page 6 of 7</span></div>
-</div>
-<div class="page">
-<section class="section"><h2 class="sec"><span class="num">XII</span>Supporting Documentation</h2>
-<p>The following supporting documentation is available upon request.</p>
-<table class="kv"><tbody>{{ doc_list_html }}</tbody></table>
-<p class="note-fine" style="margin-top:14pt">This memorandum is prepared solely for the internal credit evaluation of South River Capital and its participation lenders. All information is derived from executed loan documents, third-party credit reports, and borrower-provided financial statements on file. This document is <strong>confidential</strong> and intended only for authorized recipients.</p></section>
-<div class="pg-footer"><span>South River Capital &mdash; Credit Memorandum</span><span>Page 7 of 7</span></div>
-</div>

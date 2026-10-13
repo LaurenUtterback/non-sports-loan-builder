@@ -285,8 +285,11 @@ def test_interest_only_structure():
     terms.amortization_type = "interest_only"
     html = render_html(terms, LoanDocsInclude())
     assert "Interest only payments are due monthly" in html
-    assert "$20,833.00" in html            # 2,000,000 * 12.5% / 12, monthly
-    assert "$2,020,833.00" in html         # final row: principal + last interest
+    # To the cent since 2026-10-13: 2,000,000 * 12.5% / 12 = 20,833.33, not
+    # 20,833. A promissory note should state the payment the borrower actually
+    # owes - and the credit memo's own examples print cents.
+    assert "$20,833.33" in html            # 2,000,000 * 12.5% / 12, monthly
+    assert "$2,020,833.33" in html         # final row: principal + last interest
 
 
 def test_fully_amortized_structure():

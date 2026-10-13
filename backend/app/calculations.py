@@ -233,7 +233,13 @@ def calc_repayment_schedule(principal: float, rate: float,
     """
     months = (mat_date.year - fund_date.year) * 12 + (mat_date.month - fund_date.month)
     months = max(months, 1)
-    monthly_interest = round((principal or 0) * (rate / 100) / 12)
+    # NOT rounded here - rounding is a presentation concern and belongs in the
+    # formatter. Lauren's examples print $36,666.67 a month AND $440,000.00 a
+    # year on a $4,000,000 11% facility; rounding the monthly to the cent first
+    # and then summing twelve of them gives $440,000.04, which reads like
+    # sloppy arithmetic in a credit memo. Keeping full precision and rounding
+    # only at display makes both figures right.
+    monthly_interest = (principal or 0) * (rate / 100) / 12
 
     rows = []
     for i in range(1, months + 1):
@@ -246,6 +252,7 @@ def calc_repayment_schedule(principal: float, rate: float,
             "num": i,
             # integer day + %b/%y, never the glibc-only "%-d" (ValueError on Windows)
             "date": f"{d.day}-{d.strftime('%b')}-{d.strftime('%y')}",
+            "iso": d,
             "interest": monthly_interest,
             "principal": prin,
             "total": monthly_interest + prin,
@@ -260,6 +267,253 @@ def calc_repayment_schedule(principal: float, rate: float,
         "total_principal": total_principal,
         "total_payment": total_interest + total_principal,
         "months": months,
+    }
+
+
+# --- Amortizing facilities ------------------------------------------------
+#
+# DAY-COUNT BASIS. Lauren's own amortizing template (the Walgreens/Bouye memo)
+# accrues interest ACTUAL/360: on a $1,000,000 12% facility its row 2 is
+# $8,588.66 over 28 days and row 3 is $8,680.17 over 31 days, both of which are
+# actual/360 to the cent (actual/365 gives $8,471.01 and $8,561.27). So that is
+# the basis used here.
+#
+# Two things worth knowing about that template:
+#  * Its FIRST row is not on the same basis as the rest - $9,000.00 is exactly
+#    one month at 12%/12 (30/360), where actual/360 over those 31 days is
+#    $10,333.33. Under-charging the first period lowers its total interest and
+#    therefore its level payment ($88,785.95). A schedule on ONE consistent
+#    basis cannot reproduce that figure, and should not try to; it comes out
+#    near $88,900, and the difference is the hand-entered first row.
+#  * INTEREST-ONLY facilities are a different convention again: McCormick's
+#    $4,000,000 at 11% pays $36,666.67 a month, which is rate/12 exactly - what
+#    calc_repayment_schedule already does. Nothing there needs changing.
+ACT_360 = 360.0
+
+def calc_amortizing_schedule(principal: float, rate: float,
+                             fund_date: date, mat_date: date) -> dict:
+    """Level-payment amortization: the same total every month, retiring the
+    principal by maturity, with interest accrued ACTUAL/360 (see above).
+
+    The counterpart of calc_repayment_schedule (interest-only + balloon), for
+    the structure the Walgreens/Bouye template uses - a 12-month facility fully
+    amortized at a level $88,785.95 a month. The level payment is solved from
+    the nominal monthly rate, then each month's INTEREST is taken actual/365 on
+    the outstanding balance (rule S6, as everywhere else here), with principal
+    the remainder. That is why a real schedule's interest column is not
+    monotonic: a 28-day month accrues less than a 31-day one. The final
+    payment absorbs the rounding so the principal column foots to the loan
+    exactly.
+    """
+    months = (mat_date.year - fund_date.year) * 12 + (mat_date.month - fund_date.month)
+    months = max(months, 1)
+    principal = principal or 0.0
+
+    # Payment dates first: the level payment has to be solved against the
+    # ACTUAL day counts, not against a nominal monthly rate.
+    dates = []
+    for n in range(1, months + 1):
+        y = fund_date.year + (fund_date.month - 1 + n) // 12
+        m = (fund_date.month - 1 + n) % 12 + 1
+        dates.append(date(y, m, min(fund_date.day, 28)))
+
+    def ending_balance(level: float) -> float:
+        bal, last = principal, fund_date
+        for d in dates:
+            bal += bal * (rate / 100 / ACT_360) * (d - last).days
+            bal -= level
+            last = d
+        return bal
+
+    # Bisect for the payment that lands the balance exactly on zero. The
+    # closed-form annuity payment (principal * i / (1 - (1+i)^-n) at a nominal
+    # monthly i) assumes twelve equal periods and so overstates the payment on
+    # an actual/365 facility - by $62.84 a month on the reference 12-month
+    # $1,000,000 at 12%, which is a schedule that visibly disagrees with the
+    # one Lauren's own template prints. Solving it gets that exactly right for
+    # any day-count pattern, leap years included.
+    if principal <= 0:
+        level = 0.0
+    elif rate:
+        lo, hi = principal / months, principal          # hi overpays by design
+        for _ in range(200):
+            mid = (lo + hi) / 2
+            if ending_balance(mid) > 0:
+                lo = mid                                # underpaying
+            else:
+                hi = mid
+        level = round((lo + hi) / 2, 2)
+    else:
+        level = round(principal / months, 2)
+
+    rows: list[dict] = []
+    balance = principal
+    last = fund_date
+    for n, d in enumerate(dates, start=1):
+        interest = balance * (rate / 100 / ACT_360) * (d - last).days
+        prin = level - interest
+        if n == months or prin > balance:          # final payment clears it
+            prin = balance
+        balance = round(balance - prin, 2)
+        rows.append({
+            "num": n,
+            "date": f"{d.month}/{d.day}/{d.year}",
+            "iso": d,
+            "interest": round(interest, 2),
+            "principal": round(prin, 2),
+            "total": round(interest + prin, 2),
+            "balance": balance,
+            "is_balloon": False,
+        })
+        last = d
+
+    total_interest = round(sum(r["interest"] for r in rows), 2)
+    total_principal = round(sum(r["principal"] for r in rows), 2)
+    return {
+        "rows": rows,
+        "level_payment": round(level, 2),
+        "total_interest": total_interest,
+        "total_principal": total_principal,
+        "total_payment": round(total_interest + total_principal, 2),
+        "months": months,
+    }
+
+
+def annualize_schedule(rows: list[dict], fund_date: Optional[date]) -> list[dict]:
+    """Roll a monthly schedule into the year bands McCormick prints.
+
+    A 36-month interest-only schedule is 36 near-identical rows; the example
+    shows three ("Year 1 (12/2026 - 11/2027)") plus a total, which is what a
+    reader actually needs. Bands are 12 payments each from the first payment,
+    so they follow the facility rather than the calendar.
+    """
+    if not rows:
+        return []
+    out: list[dict] = []
+    for start in range(0, len(rows), 12):
+        band = rows[start:start + 12]
+        # Month/year, the way McCormick labels its bands ("Year 1 (12/2026 -
+        # 11/2027)"), taken from the ISO date rather than the display string so
+        # the label is the same whichever schedule built the rows.
+        a, b = band[0].get("iso"), band[-1].get("iso")
+        span = (f"{a.month}/{a.year} - {b.month}/{b.year}" if a and b
+                else f'{band[0]["date"]} - {band[-1]["date"]}')
+        out.append({
+            "label": f"Year {start // 12 + 1} ({span})",
+            "interest": round(sum(r["interest"] for r in band), 2),
+            "principal": round(sum(r["principal"] for r in band), 2),
+            "total": round(sum(r["total"] for r in band), 2),
+        })
+    return out
+
+
+# --- Financial Analysis ---------------------------------------------------
+
+def annual_debt_service(loan: float, rate: float, amortization: str,
+                        schedule: Optional[dict] = None) -> float:
+    """What the Financial Analysis table tests the borrower's earnings against.
+
+    Interest-only: a full year of interest (McCormick's $440,000 on $4.0MM at
+    11%). Amortizing: twelve level payments, because principal is a real call
+    on cash flow even though it is not an expense.
+    """
+    if amortization == "amortizing" and schedule and schedule.get("level_payment"):
+        return round(schedule["level_payment"] * 12, 2)
+    return round((loan or 0) * (rate or 0) / 100, 2)
+
+
+def calc_financial_analysis(financials, debt_service: float) -> dict:
+    """The table plus its DSCR row and break-even line.
+
+    ``financials`` is Extraction.financials, oldest period first. A period with
+    no EBITDA gets a None DSCR, which the memo prints as [TBD] - the examples
+    do exactly this rather than omitting the column, so the reader can see
+    which years are still outstanding.
+    """
+    periods = []
+    for f in financials or []:
+        ebitda = f.ebitda
+        periods.append({
+            "period": f.period or "",
+            "revenue": f.revenue,
+            "ebitda": ebitda,
+            "net_income": f.net_income,
+            "debt_service": debt_service,
+            "dscr": (round(ebitda / debt_service, 2)
+                     if ebitda is not None and debt_service else None),
+        })
+    return {
+        "periods": periods,
+        "debt_service": debt_service,
+        "breakeven": [
+            {"label": "1.00x", "ebitda": round(debt_service, 2)},
+            {"label": "1.25x", "ebitda": round(debt_service * 1.25, 2)},
+            {"label": "1.50x", "ebitda": round(debt_service * 1.50, 2)},
+        ],
+        "any_dscr": any(p["dscr"] is not None for p in periods),
+    }
+
+
+# --- Collateral coverage --------------------------------------------------
+
+def calc_collateral_coverage(rows, loan: float, appraised: float = 0.0) -> dict:
+    """Each stated value with the LTV it implies, plus the equity cushion.
+
+    McCormick lists the appraisal, a live sale-leaseback offer and two stressed
+    cap rates side by side - the point being that the LTV is shown under the
+    unflattering bases too. The cushion is measured against the HIGHEST basis
+    given (the appraisal, normally), because that is the figure the deal is
+    sized on.
+    """
+    out = []
+    for r in rows or []:
+        value = r.value or 0
+        out.append({
+            "basis": r.basis or "",
+            "value": value,
+            "ltv": round(loan / value * 100, 1) if value and loan else None,
+        })
+    top = appraised or max((r["value"] for r in out), default=0.0)
+    return {
+        "rows": out,
+        "equity_cushion": round(top - (loan or 0), 2) if top else None,
+        "top_value": top,
+    }
+
+
+# --- Investor returns -----------------------------------------------------
+
+_INVESTOR_UNIT = 100_000.0
+
+
+def calc_investor_returns(loan: float, rate: float, points: float,
+                          months: int) -> dict:
+    """What a participant receives, per $100,000 and across the whole loan.
+
+    Investor economics are NOT always the borrower's: on the Walgreens deal the
+    borrower paid 12% and 5 points while investors received 10% and 1 point, so
+    the caller passes the INVESTOR rate and points, never the borrower's.
+    """
+    loan = loan or 0.0
+    months = max(int(months or 0), 0)
+    years = months / 12
+
+    def block(base):
+        annual = base * (rate or 0) / 100
+        return {
+            "points": round(base * (points or 0) / 100, 2),
+            "monthly": round(annual / 12, 2),
+            "annual": round(annual, 2),
+            "total": round(base * (points or 0) / 100 + annual * years, 2),
+        }
+
+    return {
+        "rate": rate or 0.0,
+        "points": points or 0.0,
+        "months": months,
+        "unit": _INVESTOR_UNIT,
+        "per_unit": block(_INVESTOR_UNIT),
+        "full": block(loan),
     }
 
 

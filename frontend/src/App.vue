@@ -45,6 +45,15 @@ const terms = reactive({
   loan: null, rate: null, fee: null, income: null, contracted_income: null,
   collateral_value: null, collateral_desc: '',
   fund: '', mat: '', loan_type: 'New Loan',
+  // How the memo frames the deal. Taken from Lauren's example memos: a
+  // headline, the asset class and purpose on the meta line, the Loan Summary's
+  // own rows, and the repayment structure that drives the schedule.
+  headline: '', asset_class: '', purpose: '',
+  property_owner: '', guarantors: '', prepayment: '', key_conditions: '',
+  amortization: 'io',
+  // Investor economics, which are not always the borrower's: on the Walgreens
+  // deal the borrower paid 12% + 5 pts while investors received 10% + 1 pt.
+  investor_rate: null, investor_points: null, show_investor_returns: true,
   // Which borrower profile this deal is: swaps the memo's Section IV risk FAQ,
   // Section I's purpose language and Section XI's repayment sources.
   // Underwriter-set only — the extraction never touches it.
@@ -162,6 +171,9 @@ async function runExtract() {
       employer: ed.employer, industry: ed.industry, occupation: ed.occupation,
       ssn: ed.ssn_masked, dl: ed.drivers_license, advisor: ed.advisor,
       collateral_desc: ed.collateral_desc,
+      headline: ed.headline, asset_class: ed.asset_class, purpose: ed.purpose,
+      property_owner: ed.property_owner, guarantors: ed.guarantors,
+      prepayment: ed.prepayment, key_conditions: ed.key_conditions,
     }
     for (const [k, v] of Object.entries(map)) if (v && !terms[k]) terms[k] = v
     // Numeric deal terms: only fill blanks so a value the user already typed
@@ -217,6 +229,8 @@ function buildTermsPayload() {
     income: Number(terms.income) || 0,
     contracted_income: Number(terms.contracted_income) || 0,
     collateral_value: Number(terms.collateral_value) || 0,
+    investor_rate: Number(terms.investor_rate) || 0,
+    investor_points: Number(terms.investor_points) || 0,
     fund: terms.fund || null,
     mat: terms.mat || null,
   }
@@ -327,6 +341,15 @@ async function exportWord() {
         </label>
         <label>Pledged collateral <input v-model="terms.collateral_desc"
             placeholder="e.g. mixed-use building, 12 Harbor Road" /></label>
+        <label>Repayment structure
+          <select v-model="terms.amortization">
+            <option value="io">Interest only, principal at maturity</option>
+            <option value="amortizing">Fully amortizing, level payments</option>
+          </select>
+          <span class="verify-note">Drives the Repayment Schedule and the Loan
+            Summary's Payments row. Interest-only pays rate&nbsp;&divide;&nbsp;12 monthly;
+            amortizing solves a level payment with interest actual/360.</span>
+        </label>
         <label>Loan amount <input v-model.number="terms.loan" type="number" /></label>
         <label>Loan type
           <select v-model="terms.loan_type">
@@ -342,6 +365,47 @@ async function exportWord() {
         <label>Maturity date <input v-model="terms.mat" type="date" /></label>
         <label>Tax ID (last 4) <input v-model="terms.ssn" placeholder="XXX-XX-1234" /></label>
         <label>Adviser (CPA / attorney) <input v-model="terms.advisor" /></label>
+      </div>
+
+      <h3 class="grp">How the memo reads</h3>
+      <div class="grid">
+        <label>Headline
+          <input v-model="terms.headline"
+                 placeholder="$4M First Lien Loan — McCormick Paints, Frederick, MD" />
+          <span class="verify-note">The memo's title. Leave blank and it is
+            composed from the terms.</span>
+        </label>
+        <label>Asset class <input v-model="terms.asset_class"
+            placeholder="Commercial Real Estate" /></label>
+        <label>Purpose <input v-model="terms.purpose"
+            placeholder="Refinance of existing bank loan" /></label>
+        <label>Property owner / grantor
+          <input v-model="terms.property_owner" />
+          <span class="verify-note">Only when title sits in a different entity
+            from the borrower.</span>
+        </label>
+        <label>Guarantor(s) <input v-model="terms.guarantors"
+            placeholder="None personal" /></label>
+        <label>Prepayment <input v-model="terms.prepayment" /></label>
+        <label>Key conditions <input v-model="terms.key_conditions"
+            placeholder="Updated appraisal, Phase I ESA, title insurance" /></label>
+      </div>
+
+      <h3 class="grp">Investor returns</h3>
+      <label class="chk">
+        <input type="checkbox" v-model="terms.show_investor_returns" />
+        Include the Investor Returns section
+      </label>
+      <div class="grid" v-if="terms.show_investor_returns">
+        <label>Investor rate (% p.a.)
+          <input v-model.number="terms.investor_rate" type="number" step="0.01" />
+          <span class="verify-note">Blank = the same rate the borrower pays.</span>
+        </label>
+        <label>Investor points (%)
+          <input v-model.number="terms.investor_points" type="number" step="0.01" />
+          <span class="verify-note">Blank = the same points the borrower pays.
+            These differ on a syndicated deal.</span>
+        </label>
       </div>
     </section>
 
@@ -483,6 +547,7 @@ body { margin: 0; background: #eceae3; font-family: system-ui, sans-serif; color
 .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .chk { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: #1a1a1a; margin-bottom: 10px; }
 .chk input { width: auto; }
+.grp { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; margin: 16px 0 8px; }
 .profile-pick { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: #1a1a1a; margin-bottom: 6px; }
 .profile-pick select { width: auto; min-width: 240px; }
 .profile-note { margin: -2px 0 12px; max-width: 70ch; }

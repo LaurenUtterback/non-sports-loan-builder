@@ -22,7 +22,7 @@ import pytest
 
 from app.models import (
     Extraction, LineItem, DealTerms, UsesOfFunds, DisbursementItem,
-    DebtScheduleRow,
+    DebtScheduleRow, RiskItem,
 )
 from app import calculations as calc
 from app import memo as memo_service
@@ -306,28 +306,29 @@ def test_compliance_insurance_row_reads_none_in_place_without_a_policy():
 
 
 def test_memo_reads_no_insurance_when_the_disbursement_lacks_a_premium():
+    """Rule 19 survives the new flow: with no premium line in the
+    disbursement, nothing in the memo claims a policy.
+
+    Where it shows has moved. The athlete memo said so in a Collateral cell and
+    two "Tertiary" cards; this memo says it in the key-person mitigant and in
+    the compliance appendix.
+    """
     ed = Extraction(uses_of_funds=_uof("Interest Reserve (Est)"))
     terms = DealTerms(name="Test Borrower", loan=1_400_000, income=9_000_000)
     html = memo_service.render_html(terms, ed, [])
-    # The coversheet keeps addressing insurance - honestly:
-    assert "Life / disability insurance to Lender" in html  # checklist row stays
-    assert html.count("None in place") == 1                 # its Actual
-    assert html.count("No Insurance") == 1                  # the Collateral cell
-    # ...while the memo body stops claiming a policy:
-    assert "life/disability policy" not in html
-    assert "Life / disability insurance policy assigned" not in html
-    assert "Tertiary" not in html           # Sections I and XI lose the card
+    assert "No policy is assigned" in html
+    assert "insurance assigned to Lender" not in html
+    # the appendix still addresses insurance, honestly
+    assert "Life / disability insurance to Lender" in html
+    assert html.count("None in place") == 1
 
 
 def test_memo_includes_insurance_when_the_disbursement_reflects_it():
     ed = Extraction(uses_of_funds=_uof("Life insurance premium"))
     terms = DealTerms(name="Test Borrower", loan=1_400_000, income=9_000_000)
     html = memo_service.render_html(terms, ed, [])
-    assert "life/disability policy" in html
-    assert "Life / disability insurance to Lender" in html
-    assert "life / disability insurance policy assigned to lender" in html.lower()
-    assert html.count("Tertiary") == 2      # Sections I and XI
-    assert "No Insurance" not in html
+    assert "Life / disability insurance assigned to Lender" in html
+    assert "No policy is assigned" not in html
     assert "None in place" not in html
 
 
@@ -411,11 +412,13 @@ def test_amort_interest_actual_365():
 def test_repayment_schedule_interest_monthly_principal_balloon():
     # Interest paid every month; principal repaid as a single balloon at the end.
     sched = calc.calc_repayment_schedule(4_435_000, 15.0, date(2026, 6, 15), date(2026, 12, 15))
-    monthly = round(4_435_000 * 0.15 / 12)   # 55,438
+    # To the cent (changed 2026-10-13 from whole dollars, to match the payments
+    # Lauren's own memos print - McCormick's $36,666.67 a month).
+    monthly = round(4_435_000 * 0.15 / 12, 2)
 
     assert sched["months"] == 6
     assert len(sched["rows"]) == 6
-    assert monthly == 55_438
+    assert monthly == 55_437.5
     # interest is paid in every period
     assert all(r["interest"] == monthly for r in sched["rows"])
     # principal appears only on the final (balloon) payment
@@ -482,8 +485,9 @@ def test_confirmed_contracted_income_drives_lti_and_section_vii(ref):
     terms = DealTerms(name=REF_NAME, loan=3_425_000, rate=15,
                       income=13_500_000, contracted_income=13_500_000)
     html = memo_service.render_html(terms, ref)
+    # The Loan Summary DISCLOSES the basis, so the ratio can be checked.
+    assert "Contracted Income (facility term)" in html
     assert "$13,500,000" in html
-    assert "$3,425,000 loan &divide; $13,500,000 contracted income" in html
     # 3,425,000 / 13,500,000 = 25.4%
     assert "25.4%" in html
     assert "38.1%" not in html
@@ -493,7 +497,9 @@ def test_extracted_contracted_income_used_when_form_leaves_it_blank(ref):
     ref.contracted_income = 9_000_000
     terms = DealTerms(name=REF_NAME, loan=3_425_000, rate=15, income=9_000_000)
     html = memo_service.render_html(terms, ref)
-    assert "$3,425,000 loan &divide; $9,000,000 contracted income" in html
+    assert "Contracted Income (facility term)" in html
+    assert "$9,000,000" in html
+    assert "38.1%" in html                 # 3,425,000 / 9,000,000
 
 
 def test_lti_is_loan_over_the_income_basis():
@@ -603,7 +609,8 @@ def test_render_shows_document_term_without_dates():
     ed = Extraction(loan_term_months=6)
     terms = DealTerms(name="Test Borrower", loan=4_435_000, rate=13.5, qualifying_income=9_000_000)
     html = memo_service.render_html(terms, ed, [])
-    assert "<strong>6</strong>-month full balloon loan" in html
+    assert "6 mo" in html                  # the KPI strip
+    assert "6 months" in html              # the Loan Summary Term row
 
 
 def test_render_document_term_overrides_date_span():
@@ -614,7 +621,8 @@ def test_render_document_term_overrides_date_span():
         fund=date(2026, 1, 1), mat=date(2027, 1, 1),
     )
     html = memo_service.render_html(terms, ed, [])
-    assert "<strong>6</strong>-month full balloon loan" in html
+    assert "6 mo" in html                  # the KPI strip
+    assert "6 months" in html              # the Loan Summary Term row
 
 
 # --- Rule 15: stale-PFS roll-forward (Method A) ---------------------------
@@ -1083,36 +1091,40 @@ def test_typed_deal_terms_override_extracted():
 
 # --- Section VII: contracted income ---------------------------------------
 
-def test_contracted_income_renders_in_section_vii():
+def test_contracted_income_renders_in_the_loan_summary():
     terms = DealTerms(name="Test Borrower", loan=4_435_000, income=10_000_000)
     ed = Extraction(qualifying_income=10_000_000, contracted_income=39_500_000)
     html = memo_service.render_html(terms, ed, [])
     assert "Contracted Income (facility term)" in html
     assert "$39,500,000" in html
+    assert "committed by contract or lease" in html
 
 
-def test_contracted_income_is_the_lti_and_section_i_basis():
-    # Rule 10: with income committed by contract or lease, Section I's "advance
-    # against" figure and the LTI basis both use it, not the annual income.
+def test_contracted_income_is_the_lti_basis():
+    # Rule 10: with income committed by contract or lease, the LTI runs on it
+    # rather than on the annual income.
     terms = DealTerms(name="Test Borrower", loan=4_435_000, income=8_500_000)
     ed = Extraction(qualifying_income=8_500_000, contracted_income=39_500_000)
     html = memo_service.render_html(terms, ed, [])
-    assert "advance against <strong>$39,500,000</strong> in contracted income" in html
-    assert "$39,500,000 contracted income = <strong>11.2%</strong>" in html
+    assert "Contracted Income (facility term)" in html
+    assert "$39,500,000" in html
+    assert "11.2%" in html                 # 4,435,000 / 39,500,000
     assert "52.2" not in html  # loan / annual income must no longer drive LTI
 
 
 def test_lti_falls_back_to_qualifying_income_without_a_commitment():
     terms = DealTerms(name="Test Borrower", loan=4_435_000, income=8_500_000)
     html = memo_service.render_html(terms, Extraction(qualifying_income=8_500_000), [])
-    assert "supported by <strong>$8,500,000</strong> in annual qualifying income" in html
-    assert "$8,500,000 annual qualifying income = <strong>52.2%</strong>" in html
+    assert "Qualifying Income (annual)" in html
+    assert "Contracted Income" not in html
+    assert "52.2%" in html                 # 4,435,000 / 8,500,000
 
 
 def test_contracted_income_row_absent_when_not_extracted():
     terms = DealTerms(name="Test Borrower", loan=4_435_000, income=10_000_000)
     html = memo_service.render_html(terms, Extraction(qualifying_income=10_000_000), [])
     assert "Contracted Income (facility term)" not in html
+    assert "Qualifying Income (annual)" in html
 
 
 # --- Deal Summary & Policy Compliance coversheet ---------------------------
@@ -1258,7 +1270,14 @@ def test_compliance_flags_negative_cash_flow():
                for e in comp["exceptions"])
 
 
-def test_render_html_includes_compliance_coversheet(ref):
+def test_compliance_is_an_appendix_after_the_recommendation(ref):
+    """The checklist moved to the BACK (2026-10-13).
+
+    Neither of Lauren's example memos has a policy coversheet: both lead with
+    the deal and close with a recommendation and signature lines. The checklist
+    is kept - an approver still needs the exception view - but as an appendix,
+    so the memo reads the way the examples do.
+    """
     terms = DealTerms(
         name=REF_NAME, employer=REF_EMPLOYER, industry="commercial HVAC contracting",
         occupation="owner and president",
@@ -1266,18 +1285,35 @@ def test_render_html_includes_compliance_coversheet(ref):
         fund=date(2026, 1, 1), mat=date(2027, 1, 1),
     )
     html = memo_service.render_html(terms, ref, ["PFS.pdf"])
-    assert "Deal Summary &amp; Policy Compliance" in html
+    assert "Policy Compliance" in html
     assert "Loan-to-Income (LTI)" in html
     assert "Exceptions &amp; Mitigants" in html
     assert "Credit Approval &mdash; Exceptions Acknowledged" in html
-    # The reference deal is clean under the non-sports tests (LTI 27.8% within
-    # the 50% placeholder), so the exceptions block reads "None".
     assert "all policy criteria are within guidelines" in html
-    # The athlete checklist must not print on the coversheet or anywhere else.
+    # The EXECUTIVE SUMMARY comes first and the appendix last - the opposite of
+    # the athlete memo, where the coversheet was page 1.
+    assert html.index("Executive Summary") < html.index("Recommendation")
+    assert html.index("Recommendation") < html.index("Policy Compliance")
     for athlete_row in ATHLETE_CRITERIA:
         assert athlete_row.replace("&", "&amp;") not in html, athlete_row
-    # The coversheet is page 1 and the memo body follows.
-    assert html.index("Deal Summary &amp; Policy Compliance") < html.index("Credit Memorandum</h1>")
+
+
+def test_the_memo_leads_with_the_deal_not_a_checklist(ref):
+    """The flow of Lauren's examples, in order."""
+    terms = DealTerms(name=REF_NAME, loan=REF_LOAN, rate=12, fee=2, income=REF_INCOME,
+                      fund=date(2026, 1, 1), mat=date(2027, 1, 1))
+    html = memo_service.render_html(terms, ref, [])
+    order = ["Executive Summary", "Loan Summary", "Collateral Analysis",
+             "Borrower Profile", "Financial Analysis",
+             "Risk Considerations &amp; Mitigants",
+             "How will the borrower reservice the debt",
+             "Sources and Uses Summary", "Repayment Schedule",
+             "Required Documents", "Recommendation"]
+    found = [html.index(h) for h in order]
+    assert found == sorted(found), "sections are out of the examples' order"
+    # and none of the athlete memo's numbered sections survive
+    for roman in ("Section I", "Section VII", "Section XII"):
+        assert roman not in html
 
 
 # --- Memo rendering smoke test --------------------------------------------
@@ -1298,11 +1334,10 @@ def test_render_html_contains_key_figures(ref):
 
 
 # --- Borrower-profile mode (rule 20) --------------------------------------
-# terms.profile swaps Section IV's risk FAQ, Section I's purpose language and
-# Section XI's primary repayment source. The athlete memo's contract-risk
-# bullets ("no professional team has ever defaulted", the league backstop) have
-# no non-sports counterpart at all, so each profile gets the risks that
-# actually belong to it rather than the same bullets reworded.
+# terms.profile swaps the risks the memo states, Section I's purpose language
+# and the repayment sources. Since 2026-10-13 the risks are PAIRS - risk then
+# mitigant, the way both of Lauren's examples write them - rather than the
+# athlete memo's question-and-answer FAQ.
 
 def _profile_terms(profile, **over):
     base = dict(name="Test Borrower", employer="Northgate Mechanical LLC",
@@ -1313,69 +1348,112 @@ def _profile_terms(profile, **over):
     return DealTerms(**base)
 
 
-def test_memo_defaults_to_the_business_owner_faq():
+def test_memo_defaults_to_the_business_owner_risks():
     terms = DealTerms(name="Test Borrower", employer="Northgate Mechanical LLC",
                       loan=500_000, income=2_000_000)
     assert terms.profile == "business"
     html = memo_service.render_html(terms, Extraction(), [])
-    assert "What if the business loses its largest customers?" in html
-    assert "Customer concentration is the principal risk" in html
+    assert "Customer concentration and earnings volatility" in html
     assert "Key-person risk" in html
-    # no athlete language survives anywhere
+    assert "Mitigant:" in html
     for athlete in ("professional team", "League can step in", "injured reserve",
                     "House v. NCAA", "Collegiate", "game check", "Spotrac"):
         assert athlete not in html, athlete
-    # and no other profile's FAQ leaks in
-    assert "sit vacant" not in html
-    assert "loses their job" not in html
+    assert "Vacancy and tenant default" not in html
+    assert "Income interruption" not in html
 
 
-def test_investment_profile_swaps_the_risk_faq():
+def test_investment_profile_swaps_the_risks():
     html = memo_service.render_html(
         _profile_terms("investment", collateral_value=1_000_000,
-                       collateral_desc="mixed-use building, 12 Harbor Road"), Extraction(), [])
-    assert "What if the properties sit vacant or tenants stop paying?" in html
-    assert "What if the collateral falls in value?" in html
-    assert "What if the Borrower cannot refinance or sell at maturity?" in html
-    # the business-owner FAQ is gone
-    assert "loses its largest customers" not in html
-    # the pledged collateral reaches Section III and the coversheet
+                       collateral_desc="mixed-use building, 12 Harbor Road"),
+        Extraction(), [])
+    assert "Vacancy and tenant default" in html
+    assert "Valuation" in html
+    assert "Customer concentration" not in html
     assert "mixed-use building, 12 Harbor Road" in html
-    assert "50.0%" in html          # 500,000 / 1,000,000 LTV
-    assert "Third-party valuation of pledged collateral" in html
+    assert "50.0%" in html              # 500,000 / 1,000,000 LTV
 
 
-def test_consumer_profile_swaps_the_risk_faq():
+def test_consumer_profile_swaps_the_risks():
     html = memo_service.render_html(_profile_terms("consumer"), Extraction(), [])
-    assert "What if the Borrower loses their job" in html
-    assert "loses its largest customers" not in html
-    assert "sit vacant" not in html
-    assert "Personal income loan" in html
+    assert "Income interruption" in html
+    assert "Customer concentration" not in html
+    assert "Vacancy and tenant default" not in html
 
 
-def test_every_profile_keeps_the_over_leverage_faq():
-    """The over-leverage item is payor-agnostic and stays on every profile."""
+def test_every_profile_keeps_the_additional_leverage_risk():
+    """Payor-agnostic, so it belongs on every profile."""
     for profile in ("business", "investment", "consumer"):
         html = memo_service.render_html(_profile_terms(profile), Extraction(), [])
-        assert "over-leverages and becomes insolvent" in html
+        assert "Additional leverage" in html
         assert "first right of refusal on all additional debt" in html
+
+
+def test_the_documents_own_risks_win_over_the_generated_ones():
+    """A risk captured from the documents replaces the structural defaults -
+    and an unmitigated one is still printed, marked outstanding, rather than
+    quietly dropped."""
+    ed = Extraction(risks=[
+        RiskItem(risk="Dated appraisal", detail="The value is four years old.",
+                 mitigant="A current sale-leaseback offer supports it."),
+        RiskItem(risk="No personal guaranty",
+                 detail="Recourse is limited to the collateral.", mitigant=""),
+    ])
+    html = memo_service.render_html(_profile_terms("business"), ed, [])
+    assert "Dated appraisal" in html
+    assert "A current sale-leaseback offer supports it." in html
+    assert "none identified" in html          # the unmitigated one is disclosed
+    assert "Customer concentration" not in html   # defaults step aside
 
 
 def test_an_unsecured_deal_says_so_rather_than_claiming_collateral():
     html = memo_service.render_html(_profile_terms("business"), Extraction(), [])
-    assert "Unsecured &mdash; personal guarantee" in html
-    assert "UCC-1 filing against business assets" in html
+    assert "No specific collateral is pledged" in html
+    assert "UCC-1 filing against the Borrower's business assets" in html
 
 
-def test_profile_faq_still_follows_the_insurance_rule():
-    # rule 19 is profile-independent: the assigned-policy bullet prints only
+def test_profile_risks_still_follow_the_insurance_rule():
+    # rule 19 is profile-independent: the assigned-policy mitigant appears only
     # when the documents' disbursement carries the premium line.
     with_ins = memo_service.render_html(
         _profile_terms("business"),
         Extraction(uses_of_funds=_uof("Life insurance premium")), [])
     without = memo_service.render_html(_profile_terms("business"), Extraction(), [])
-    assert "life / disability insurance policy naming only the Lender" in with_ins
-    assert "No policy is assigned on this facility" in without
+    assert "Life / disability insurance assigned to Lender" in with_ins
+    assert "No policy is assigned" in without
+
+
+def test_the_footer_page_count_matches_the_pages_rendered():
+    """"Page 3 of 7" must not be a guess.
+
+    The athlete memo hard-coded "of 7", which was true for exactly one shape of
+    deal; this memo has two conditional pages (the PFS block and the compliance
+    appendix), so Jinja counts them. A footer that disagrees with the document
+    it sits in is the kind of error a reader notices and then distrusts
+    everything else about.
+    """
+    import re
+
+    def check(terms, ed):
+        html = memo_service.render_html(terms, ed, [])
+        pages = html.count('class="page"')
+        claims = {int(m) for m in re.findall(r"Page \d+ of (\d+)", html)}
+        numbers = sorted(int(m) for m in re.findall(r"Page (\d+) of \d+", html))
+        assert claims == {pages}, f"footers claim {claims}, document has {pages}"
+        assert numbers == list(range(1, pages + 1)), f"page numbers are {numbers}"
+
+    base = dict(name="Test Borrower", loan=1_000_000, rate=12, fee=2,
+                income=500_000, fund=date(2026, 1, 1), mat=date(2027, 1, 1))
+    # no PFS, collateral, interest only
+    check(DealTerms(**base, collateral_value=2_000_000), Extraction())
+    # with a PFS, which adds a page
+    check(DealTerms(**base), Extraction(total_assets=500_000,
+                                        assets=[LineItem(label="Cash", amount=500_000)]))
+    # amortizing, unsecured
+    check(DealTerms(**base, amortization="amortizing"), Extraction())
+    # investor returns off
+    check(DealTerms(**base, show_investor_returns=False), Extraction())
 
 
 # --- Word export footer ----------------------------------------------------
