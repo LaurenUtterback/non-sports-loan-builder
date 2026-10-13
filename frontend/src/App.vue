@@ -132,6 +132,22 @@ const money = (n) => (n || n === 0)
 // --- derived ---------------------------------------------------------------
 const canGenerate = computed(() => terms.loan && terms.income)
 
+function onFiles(e) {
+  // Accumulate across selections so the user can add documents one or several
+  // at a time (e.g. from different folders); dedupe by name+size.
+  const seen = new Set(files.value.map((f) => f.name + ':' + f.size))
+  for (const f of Array.from(e.target.files)) {
+    const key = f.name + ':' + f.size
+    if (!seen.has(key)) { files.value.push(f); seen.add(key) }
+  }
+  // reset so picking the same file again (or adding more later) still fires change
+  e.target.value = ''
+}
+
+function removeFile(i) {
+  files.value.splice(i, 1)
+}
+
 async function runExtract() {
   if (!files.value.length) return
   extracting.value = true
