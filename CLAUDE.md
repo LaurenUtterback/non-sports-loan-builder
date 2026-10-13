@@ -51,6 +51,69 @@ row to restate, and guessing that row from a collateral description would
 silently mismark a balance sheet. See the note where it used to live in
 `calculations.py`.
 
+## The memo's flow (Lauren's examples are the spec, 2026-10-13)
+
+Lauren supplied two memos as the specification — **McCormick Paints** (a $4M
+first-lien CRE refinance) and the **Walgreens/Bouye template** — and said to
+use them as how the memo should flow. The athlete memo's numbered Sections
+I–XII are GONE. The order is now:
+
+1. Headline + `date | asset class | purpose`
+2. KPI strip — loan, rate/points, LTV (or LTI when unsecured), term/structure
+3. Executive Summary
+4. Loan Summary (key/value, incl. the disclosed LTI basis)
+5. Collateral Analysis + Collateral Coverage (value and LTV per basis)
+6. Borrower Profile
+7. Financial Analysis — multi-period revenue/EBITDA/net income, DSCR, break-even
+8. **[PFS + Guarantor Cash Flow — only when a PFS was uploaded]**
+9. Risk Considerations & Mitigants — PAIRS, not a FAQ
+10. How will the borrower reservice the debt — primary / secondary / tertiary
+11. Sources and Uses Summary
+12. Repayment Schedule (year bands when long)
+13. **[Investor Returns — `show_investor_returns`, default on]**
+14. Required Documents
+15. Recommendation + Prepared / Reviewed / Approved signature lines
+16. **[Appendix: Policy Compliance — `_SHOW_COMPLIANCE` in memo.py]**
+
+Three decisions taken when Lauren declined to be asked; all reversible:
+* The compliance checklist MOVED TO THE BACK rather than being deleted.
+  Neither example has a coversheet. `_SHOW_COMPLIANCE = False` drops it.
+* Investor Returns are generated, with a toggle. Bouye proves the rate and
+  points need their own fields: borrower 12% + 5 pts, investors 10% + 1 pt.
+* PFS sections print only when a PFS was uploaded.
+
+**The memo marks its own gaps.** Both examples print `[TBD]`, `[confirm]`,
+`[Request FY2023-FY2025 statements]` inline. So does this: a missing financial
+period renders `[TBD]`, an unmitigated risk prints with the mitigant marked
+outstanding, and a missing income figure says so in the Executive Summary.
+Never substitute a plausible number for an absent one.
+
+### Day-count conventions — THREE of them, each deliberate
+
+| Path | Basis | Why |
+| --- | --- | --- |
+| Interest-only monthly (`calc_repayment_schedule`) | rate ÷ 12 | McCormick pays $36,666.67/mo on $4,000,000 at 11% — rate/12 exactly |
+| Amortizing (`calc_amortizing_schedule`) | **actual/360** | The Bouye template's rows 2–3 ($8,588.66 over 28 days, $8,680.17 over 31) are actual/360 to the cent |
+| Facility total on the PFS (`calc_amort`) | actual/365 | Inherited from the athlete builder; unchanged, and only feeds the PFS liability |
+
+Two things worth knowing:
+* **Rounding happens at DISPLAY, never in the schedule.** Summing a rounded
+  $36,666.67 twelve times gives $440,000.04; McCormick says $440,000.00. Keep
+  full precision and let `_money2` (cents) or `_money` (whole dollars) round.
+* **The Bouye template cannot be reproduced exactly, and that is the
+  template's doing.** Its first row charges $9,000.00 — one month at 12%/12,
+  a different basis from its own rows 2+. Under-charging the first period
+  lowers its total interest and so its $88,785.95 instalment. On one
+  consistent basis the payment lands near $88,900. Do not "fix" this by
+  special-casing the first row.
+
+**Page numbers are counted by Jinja**, not hard-coded, because two pages are
+conditional. `test_the_footer_page_count_matches_the_pages_rendered` asserts
+the footers agree with the pages rendered across four deal shapes — the
+athlete memo's hard-coded "of 7" was true for exactly one shape of deal, and a
+page 1 overflow during this work made the preview claim 7 while the PDF ran to
+8.
+
 ## Layout
 
 ```
