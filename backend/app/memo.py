@@ -39,11 +39,11 @@ _PDF_HEADER_TEMPLATE = "<div></div>"
 _DEFAULT_FOOTER_TEXT = "South River Capital — Credit Memorandum"
 
 # Neither of Lauren's example memos carries the Deal Summary & Policy
-# Compliance checklist: both lead with the deal and close with a
-# recommendation and signature lines. Rather than delete the checklist, it
-# moves to a final APPENDIX page - the memo reads like the examples, and the
-# compliance view survives for the file. Set this False to drop it entirely.
-_SHOW_COMPLIANCE = True
+# Compliance checklist: both lead with the deal and close with a recommendation
+# and signature lines. Rather than delete the checklist it became a final
+# APPENDIX page - and since 2026-10-14 whether it prints is a per-deal choice
+# (DealTerms.show_compliance), not a constant here. Same for the PFS block
+# (show_pfs) and Investor Returns (show_investor_returns).
 
 
 def _pdf_footer_template(footer_text: str, page_numbers: bool = True) -> str:
@@ -676,7 +676,12 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
     }
 
     # --- narratives ---------------------------------------------------------
-    has_pfs = bool(ed and (ed.total_assets or ed.assets or ed.liabilities))
+    # The PFS sections need BOTH a statement to show and the underwriter's
+    # say-so: a collateral deal with a PFS on file may still not want it in a
+    # memo that circulates to participants.
+    has_pfs_data = bool(ed and (ed.total_assets or ed.assets or ed.liabilities))
+    has_pfs = has_pfs_data and bool(terms.show_pfs)
+    show_compliance = bool(terms.show_compliance)
     credit_text = _credit_text(ed, date.today())
     compliance = calc.calc_policy_compliance(
         lti=lti, ltv=ltv, dscr=dscr, cf=cf, mat_fmt=_fmt_long(terms.mat),
@@ -736,7 +741,7 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
         # 7 fixed pages (title/exec, loan summary, collateral+borrower,
         # financials, risks+repayment sources, sources+schedule,
         # investor+documents+recommendation), plus the two conditional ones.
-        "page_count": 7 + (1 if has_pfs else 0) + (1 if _SHOW_COMPLIANCE else 0),
+        "page_count": 7 + (1 if has_pfs else 0) + (1 if show_compliance else 0),
         "logo": _LOGO_PATH.read_text().strip(),
         "tbd": "[TBD]",
         "name": name,
@@ -822,7 +827,7 @@ def render_html(terms: DealTerms, ed: Extraction | None, filenames: list[str] | 
         "required_documents": list((ed.required_documents if ed else []) or []),
         "doc_list_html": _doc_list_html(filenames),
         "recommendation": recommendation,
-        "show_compliance": _SHOW_COMPLIANCE,
+        "show_compliance": show_compliance,
         "compliance_html": _compliance_rows_html(compliance["rows"]),
         "exceptions_html": _exceptions_html(compliance),
         "provisional": compliance["provisional"],

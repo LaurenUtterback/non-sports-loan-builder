@@ -53,7 +53,9 @@ const terms = reactive({
   amortization: 'io',
   // Investor economics, which are not always the borrower's: on the Walgreens
   // deal the borrower paid 12% + 5 pts while investors received 10% + 1 pt.
-  investor_rate: null, investor_points: null, show_investor_returns: true,
+  investor_rate: null, investor_points: null,
+  // Which optional sections this memo carries.
+  show_investor_returns: true, show_pfs: true, show_compliance: true,
   // Which borrower profile this deal is: swaps the memo's Section IV risk FAQ,
   // Section I's purpose language and Section XI's repayment sources.
   // Underwriter-set only — the extraction never touches it.
@@ -231,6 +233,9 @@ function buildTermsPayload() {
     collateral_value: Number(terms.collateral_value) || 0,
     investor_rate: Number(terms.investor_rate) || 0,
     investor_points: Number(terms.investor_points) || 0,
+    show_investor_returns: !!terms.show_investor_returns,
+    show_pfs: !!terms.show_pfs,
+    show_compliance: !!terms.show_compliance,
     fund: terms.fund || null,
     mat: terms.mat || null,
   }
@@ -391,10 +396,21 @@ async function exportWord() {
             placeholder="Updated appraisal, Phase I ESA, title insurance" /></label>
       </div>
 
-      <h3 class="grp">Investor returns</h3>
+      <h3 class="grp">Sections to include</h3>
       <label class="chk">
         <input type="checkbox" v-model="terms.show_investor_returns" />
-        Include the Investor Returns section
+        Investor Returns
+        <span class="opt-note">what a participant receives, per $100,000 and across the loan</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" v-model="terms.show_pfs" />
+        Personal Financial Statement &amp; guarantor cash flow
+        <span class="opt-note">prints only when a PFS was uploaded</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" v-model="terms.show_compliance" />
+        Policy Compliance appendix
+        <span class="opt-note">the LTI / LTV / DSCR checklist and the credit-approval signature, at the back</span>
       </label>
       <div class="grid" v-if="terms.show_investor_returns">
         <label>Investor rate (% p.a.)
@@ -547,6 +563,7 @@ body { margin: 0; background: #eceae3; font-family: system-ui, sans-serif; color
 .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .chk { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: #1a1a1a; margin-bottom: 10px; }
 .chk input { width: auto; }
+.opt-note { font-size: 11px; color: #999; font-style: italic; margin-left: 4px; }
 .grp { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; margin: 16px 0 8px; }
 .profile-pick { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: #1a1a1a; margin-bottom: 6px; }
 .profile-pick select { width: auto; min-width: 240px; }

@@ -1424,6 +1424,58 @@ def test_profile_risks_still_follow_the_insurance_rule():
     assert "No policy is assigned" in without
 
 
+def test_each_optional_section_can_be_switched_off():
+    """The three optional sections are the underwriter's choice per deal.
+
+    They were decided in code at first (a module constant for the appendix, an
+    automatic PFS block); since 2026-10-14 each is a DealTerms field with a
+    checkbox in Step 2, because which sections belong depends on the deal and
+    on who the memo is going to.
+    """
+    pfs = Extraction(total_assets=500_000,
+                     assets=[LineItem(label="Cash", amount=500_000)])
+    base = dict(name="Test Borrower", loan=1_000_000, rate=12, fee=2,
+                income=500_000, fund=date(2026, 1, 1), mat=date(2027, 1, 1))
+
+    full = memo_service.render_html(DealTerms(**base), pfs, [])
+    assert "Investor Returns" in full
+    assert "Guarantor Cash Flow" in full
+    assert "As reported on Personal Financial Statement" in full
+    assert "Policy Compliance" in full
+
+    no_inv = memo_service.render_html(
+        DealTerms(**base, show_investor_returns=False), pfs, [])
+    assert "Investor Returns" not in no_inv
+    assert "Guarantor Cash Flow" in no_inv and "Policy Compliance" in no_inv
+
+    no_pfs = memo_service.render_html(DealTerms(**base, show_pfs=False), pfs, [])
+    assert "As reported on Personal Financial Statement" not in no_pfs
+    assert "Guarantor Cash Flow" not in no_pfs
+    assert "Investor Returns" in no_pfs and "Policy Compliance" in no_pfs
+
+    no_comp = memo_service.render_html(
+        DealTerms(**base, show_compliance=False), pfs, [])
+    assert "Policy Compliance" not in no_comp
+    assert "Credit Approval" not in no_comp
+    assert "Investor Returns" in no_comp and "Guarantor Cash Flow" in no_comp
+
+    # ...and the page count follows each one, so the footers stay honest.
+    none_of_it = memo_service.render_html(
+        DealTerms(**base, show_investor_returns=False, show_pfs=False,
+                  show_compliance=False), pfs, [])
+    assert none_of_it.count('class="page"') == full.count('class="page"') - 2
+    assert "of 7" in none_of_it          # the seven fixed pages
+
+
+def test_show_pfs_cannot_conjure_a_statement_that_was_never_uploaded():
+    """The toggle only says whether to print a PFS the documents provided."""
+    terms = DealTerms(name="Test Borrower", loan=1_000_000, rate=12,
+                      income=500_000, show_pfs=True)
+    html = memo_service.render_html(terms, Extraction(), [])
+    assert "Guarantor Cash Flow" not in html
+    assert "As reported on Personal Financial Statement" not in html
+
+
 def test_the_footer_page_count_matches_the_pages_rendered():
     """"Page 3 of 7" must not be a guess.
 

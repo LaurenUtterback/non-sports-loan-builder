@@ -322,7 +322,17 @@ class DealTerms(BaseModel):
     # received 10% and 1 point. Blank falls back to the borrower's rate/fee.
     investor_rate: float = 0.0
     investor_points: float = 0.0
+
+    # --- which optional sections this memo carries -------------------------
+    # Neither of Lauren's example memos has all three, and which belong depends
+    # on the deal rather than on a setting in the code: a syndicated deal wants
+    # investor returns, a collateral deal has no PFS to show, and the policy
+    # appendix is for the approver rather than for a participant's copy.
     show_investor_returns: bool = True
+    # The PFS and guarantor cash flow still require a PFS to have been
+    # uploaded - this only says whether to print them when there IS one.
+    show_pfs: bool = True
+    show_compliance: bool = True
     # Which of the three non-sports borrower profiles this deal is, which swaps
     # the memo's risk FAQ, repayment sources and purpose language (rule 20).
     # Set only by the underwriter, never by extraction.

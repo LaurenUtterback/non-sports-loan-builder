@@ -1,4 +1,4 @@
-"""Local dev launcher for the Non-Sports Loan Builder backend.
+r"""Local dev launcher for the Non-Sports Loan Builder backend.
 
 Runs a single in-process Uvicorn server on THIS interpreter. Importing the app
 object (instead of passing the ``"app.main:app"`` import string to the uvicorn
